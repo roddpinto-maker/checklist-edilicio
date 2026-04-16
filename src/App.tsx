@@ -161,7 +161,11 @@ function buildRows(type: VerificationType): ChecklistRow[] {
 }
 
 function toPersistedRows(rows: ChecklistRow[]): PersistedChecklistRow[] {
-  return rows.map(({ photoFile, ...rest }) => rest);
+  return rows.map((row) => {
+    const { photoFile, ...rest } = row;
+    void photoFile;
+    return rest;
+  });
 }
 
 function calculateMetrics(rows: ChecklistRow[]): Metrics {
@@ -552,9 +556,6 @@ export default function App() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button style={buttonStyle} onClick={resetChecklist}>
               <RotateCcw size={16} /> Reiniciar
-            </button>
-            <button style={buttonStyle} onClick={exportJson}>
-              <Download size={16} /> Exportar JSON
             </button>
             <button style={buttonStyle} onClick={() => window.print()}>
               <FileText size={16} /> Imprimir / PDF

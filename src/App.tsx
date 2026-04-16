@@ -235,18 +235,66 @@ const box: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "10px 12px",
-  borderRadius: 10,
+  minWidth: 0,
+  minHeight: 44,
+  boxSizing: "border-box",
+  padding: "11px 12px",
+  borderRadius: 12,
   border: "1px solid #cbd5e1",
   background: "#fff",
+  color: "#0f172a",
+  font: "inherit",
+  lineHeight: 1.2,
 };
 
 const labelStyle: React.CSSProperties = {
   display: "block",
-  marginBottom: 6,
+  marginBottom: 8,
   fontWeight: 600,
-  fontSize: 14,
-  color: "#334155",
+  fontSize: 12,
+  lineHeight: 1.35,
+  letterSpacing: "0.01em",
+  color: "#475569",
+};
+
+const reviewFieldStyle: React.CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 8,
+  alignContent: "start",
+};
+
+const reviewLabelStyle: React.CSSProperties = {
+  display: "block",
+  margin: 0,
+  fontWeight: 600,
+  fontSize: 12,
+  lineHeight: 1.35,
+  letterSpacing: "0.01em",
+  color: "#475569",
+};
+
+const reviewControlStyle: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: 44,
+  boxSizing: "border-box",
+  padding: "11px 12px",
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  font: "inherit",
+  lineHeight: 1.2,
+};
+
+const reviewFeedbackStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  minWidth: 0,
+  fontSize: 12,
+  lineHeight: 1.4,
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -565,41 +613,57 @@ export default function App() {
 
         <div style={box}>
           <h2 style={{ marginTop: 0 }}>Datos de la revisión</h2>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
-              gap: 14,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Empresa</label>
-              <input style={inputStyle} value={company} onChange={(e) => setCompany(e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Planta</label>
-              <input style={inputStyle} value={plant} onChange={(e) => setPlant(e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Sector</label>
-              <input style={inputStyle} value={sector} onChange={(e) => setSector(e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Auditor</label>
-              <input style={inputStyle} value={auditor} onChange={(e) => setAuditor(e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Fecha</label>
+          <div className="review-grid">
+            <div style={reviewFieldStyle}>
+              <label style={reviewLabelStyle}>Empresa</label>
               <input
+                className="review-control"
+                style={reviewControlStyle}
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+              />
+            </div>
+            <div style={reviewFieldStyle}>
+              <label style={reviewLabelStyle}>Planta</label>
+              <input
+                className="review-control"
+                style={reviewControlStyle}
+                value={plant}
+                onChange={(e) => setPlant(e.target.value)}
+              />
+            </div>
+            <div style={reviewFieldStyle}>
+              <label style={reviewLabelStyle}>Sector</label>
+              <input
+                className="review-control"
+                style={reviewControlStyle}
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+              />
+            </div>
+            <div style={reviewFieldStyle}>
+              <label style={reviewLabelStyle}>Auditor</label>
+              <input
+                className="review-control"
+                style={reviewControlStyle}
+                value={auditor}
+                onChange={(e) => setAuditor(e.target.value)}
+              />
+            </div>
+            <div style={reviewFieldStyle}>
+              <label style={reviewLabelStyle}>Fecha</label>
+              <input
+                className="review-control"
                 type="date"
-                style={inputStyle}
+                style={reviewControlStyle}
                 value={inspectionDate}
                 onChange={(e) => setInspectionDate(e.target.value)}
               />
             </div>
-            <div>
+            <div style={reviewFieldStyle}>
               <label style={labelStyle}>Tipo de verificación</label>
               <select
+                className="review-control"
                 style={inputStyle}
                 value={verificationType}
                 onChange={(e) => changeType(e.target.value as VerificationType)}
@@ -608,23 +672,25 @@ export default function App() {
                 <option value="en_campo">En campo</option>
               </select>
             </div>
-            <div>
+            <div style={reviewFieldStyle}>
               <label style={labelStyle}>Mail destinatario</label>
               <input
+                className="review-control"
                 style={inputStyle}
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
               />
               {recipientEmail.length > 0 && !emailValid && (
-                <div style={{ color: "#dc2626", fontSize: 12, marginTop: 6 }}>
+                <div style={{ ...reviewFeedbackStyle, color: "#dc2626" }}>
                   <AlertCircle size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
                   Mail inválido
                 </div>
               )}
             </div>
-            <div>
+            <div style={reviewFieldStyle}>
               <label style={labelStyle}>Confirmar mail</label>
               <input
+                className="review-control"
                 style={inputStyle}
                 value={confirmRecipientEmail}
                 onChange={(e) => setConfirmRecipientEmail(e.target.value)}
@@ -632,9 +698,8 @@ export default function App() {
               {confirmRecipientEmail.length > 0 && (
                 <div
                   style={{
+                    ...reviewFeedbackStyle,
                     color: emailMatch ? "#16a34a" : "#dc2626",
-                    fontSize: 12,
-                    marginTop: 6,
                   }}
                 >
                   {emailMatch ? <Check size={13} style={{ verticalAlign: "middle", marginRight: 4 }} /> : <AlertCircle size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />}

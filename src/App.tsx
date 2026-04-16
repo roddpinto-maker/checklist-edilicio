@@ -227,10 +227,11 @@ function saveJson(filename: string, data: unknown) {
 }
 
 const box: React.CSSProperties = {
-  background: "#ffffff",
+  background: "rgba(255,255,255,0.96)",
   border: "1px solid #e2e8f0",
-  borderRadius: 16,
-  padding: 16,
+  borderRadius: 24,
+  padding: "clamp(16px, 2vw, 24px)",
+  boxShadow: "0 14px 36px rgba(15, 23, 42, 0.06)",
 };
 
 const inputStyle: React.CSSProperties = {
@@ -300,11 +301,20 @@ const reviewFeedbackStyle: React.CSSProperties = {
 const buttonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
+  justifyContent: "center",
   gap: 8,
-  padding: "10px 14px",
-  borderRadius: 12,
+  minHeight: 40,
+  minWidth: 0,
+  boxSizing: "border-box",
+  padding: "9px 14px",
+  borderRadius: 999,
   border: "1px solid #cbd5e1",
-  background: "#fff",
+  background: "rgba(255,255,255,0.92)",
+  color: "#0f172a",
+  font: "inherit",
+  fontSize: 14,
+  fontWeight: 600,
+  lineHeight: 1.15,
   cursor: "pointer",
 };
 
@@ -313,6 +323,7 @@ const primaryButtonStyle: React.CSSProperties = {
   background: "#0f172a",
   color: "#fff",
   border: "1px solid #0f172a",
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
 };
 
 export default function App() {
@@ -584,34 +595,26 @@ export default function App() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: 24,
-        fontFamily: "Arial, sans-serif",
-        color: "#0f172a",
-      }}
-    >
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div>
+    <div className="app-shell">
+      <div className="app-layout">
+        <div className="app-header">
+          <div className="app-header__copy">
             <h1 style={{ margin: 0, fontSize: 42 }}>Checklist de revisión edilicia</h1>
             <p style={{ marginTop: 8, color: "#475569" }}>
               Relevamiento de condiciones edilicias con checklist dinámico según tipo de verificación.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={buttonStyle} onClick={resetChecklist}>
+          <div className="app-header__actions">
+            <button className="ui-button ui-button--header" style={buttonStyle} onClick={resetChecklist}>
               <RotateCcw size={16} /> Reiniciar
             </button>
-            <button style={buttonStyle} onClick={() => window.print()}>
+            <button className="ui-button ui-button--header" style={buttonStyle} onClick={() => window.print()}>
               <FileText size={16} /> Imprimir / PDF
             </button>
           </div>
         </div>
 
-        <div style={box}>
+        <div className="section-card" style={box}>
           <h2 style={{ marginTop: 0 }}>Datos de la revisión</h2>
           <div className="review-grid">
             <div style={reviewFieldStyle}>
@@ -661,10 +664,10 @@ export default function App() {
               />
             </div>
             <div style={reviewFieldStyle}>
-              <label style={labelStyle}>Tipo de verificación</label>
+              <label style={reviewLabelStyle}>Tipo de verificación</label>
               <select
                 className="review-control"
-                style={inputStyle}
+                style={reviewControlStyle}
                 value={verificationType}
                 onChange={(e) => changeType(e.target.value as VerificationType)}
               >
@@ -673,10 +676,10 @@ export default function App() {
               </select>
             </div>
             <div style={reviewFieldStyle}>
-              <label style={labelStyle}>Mail destinatario</label>
+              <label style={reviewLabelStyle}>Mail destinatario</label>
               <input
                 className="review-control"
-                style={inputStyle}
+                style={reviewControlStyle}
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
               />
@@ -688,10 +691,10 @@ export default function App() {
               )}
             </div>
             <div style={reviewFieldStyle}>
-              <label style={labelStyle}>Confirmar mail</label>
+              <label style={reviewLabelStyle}>Confirmar mail</label>
               <input
                 className="review-control"
-                style={inputStyle}
+                style={reviewControlStyle}
                 value={confirmRecipientEmail}
                 onChange={(e) => setConfirmRecipientEmail(e.target.value)}
               />
@@ -710,67 +713,67 @@ export default function App() {
           </div>
         </div>
 
-        <div style={box}>
+        <div className="section-card summary-card" style={box}>
           <h2 style={{ marginTop: 0 }}>Resumen ejecutivo</h2>
-          <div style={{ background: "#f8fafc", padding: 14, borderRadius: 12 }}>{executiveSummary}</div>
+          <div className="summary-panel">{executiveSummary}</div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
-            gap: 14,
-          }}
-        >
-          <div style={box}>
-            <div style={{ color: "#64748b", fontSize: 14 }}>Cumplimiento general</div>
-            <div style={{ fontSize: 32, fontWeight: 700 }}>{metrics.score}%</div>
+        <div className="kpi-grid">
+          <div className="section-card kpi-card" style={box}>
+            <div className="kpi-label">Cumplimiento general</div>
+            <div className="kpi-value">{metrics.score}%</div>
           </div>
-          <div style={box}>
-            <div style={{ color: "#64748b", fontSize: 14 }}>Cumple</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: "#16a34a" }}>{metrics.cumple}</div>
+          <div className="section-card kpi-card kpi-card--success" style={box}>
+            <div className="kpi-label">Cumple</div>
+            <div className="kpi-value" style={{ color: "#15803d" }}>{metrics.cumple}</div>
           </div>
-          <div style={box}>
-            <div style={{ color: "#64748b", fontSize: 14 }}>No cumple</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: "#dc2626" }}>{metrics.noCumple}</div>
+          <div className="section-card kpi-card kpi-card--danger" style={box}>
+            <div className="kpi-label">No cumple</div>
+            <div className="kpi-value" style={{ color: "#dc2626" }}>{metrics.noCumple}</div>
           </div>
-          <div style={box}>
-            <div style={{ color: "#64748b", fontSize: 14 }}>No aplica</div>
-            <div style={{ fontSize: 32, fontWeight: 700 }}>{metrics.noAplica}</div>
+          <div className="section-card kpi-card" style={box}>
+            <div className="kpi-label">No aplica</div>
+            <div className="kpi-value">{metrics.noAplica}</div>
           </div>
         </div>
 
-        <div style={box}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="section-card tabs-card" style={box}>
+          <div className="tabs-scroll">
+            <div className="tabs-list">
             <button
+              className={`tab-button ${activeTab === "checklist" ? "tab-button--active" : ""}`}
               style={activeTab === "checklist" ? primaryButtonStyle : buttonStyle}
               onClick={() => setActiveTab("checklist")}
             >
               Checklist
             </button>
             <button
+              className={`tab-button ${activeTab === "resumen" ? "tab-button--active" : ""}`}
               style={activeTab === "resumen" ? primaryButtonStyle : buttonStyle}
               onClick={() => setActiveTab("resumen")}
             >
               Resumen
             </button>
             <button
+              className={`tab-button ${activeTab === "hallazgos" ? "tab-button--active" : ""}`}
               style={activeTab === "hallazgos" ? primaryButtonStyle : buttonStyle}
               onClick={() => setActiveTab("hallazgos")}
             >
               Hallazgos
             </button>
             <button
+              className={`tab-button ${activeTab === "historial" ? "tab-button--active" : ""}`}
               style={activeTab === "historial" ? primaryButtonStyle : buttonStyle}
               onClick={() => setActiveTab("historial")}
             >
               Historial
             </button>
+            </div>
           </div>
         </div>
 
         {activeTab === "checklist" && (
-          <div style={box}>
+          <div className="section-card" style={box}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <input
                 style={{ ...inputStyle, maxWidth: 420 }}
@@ -922,7 +925,7 @@ export default function App() {
         )}
 
         {activeTab === "resumen" && (
-          <div style={box}>
+          <div className="section-card" style={box}>
             <h2 style={{ marginTop: 0 }}>Resumen por categoría</h2>
             <div
               style={{
@@ -958,7 +961,7 @@ export default function App() {
         )}
 
         {activeTab === "hallazgos" && (
-          <div style={box}>
+          <div className="section-card" style={box}>
             <h2 style={{ marginTop: 0 }}>Hallazgos con acción requerida</h2>
             {findings.length === 0 ? (
               <div style={{ color: "#64748b" }}>No hay hallazgos cargados como no cumple.</div>
@@ -987,7 +990,7 @@ export default function App() {
         )}
 
         {activeTab === "historial" && (
-          <div style={box}>
+          <div className="section-card" style={box}>
             <div
               style={{
                 display: "flex",
@@ -998,7 +1001,7 @@ export default function App() {
               }}
             >
               <h2 style={{ margin: 0 }}>Historial de inspecciones</h2>
-              <button style={buttonStyle} onClick={loadHistory}>
+              <button className="ui-button" style={buttonStyle} onClick={loadHistory}>
                 <RotateCcw size={16} /> Actualizar historial
               </button>
             </div>
@@ -1101,7 +1104,7 @@ export default function App() {
                     </div>
 
                     <div style={{ marginTop: 12 }}>
-                      <button style={buttonStyle} onClick={() => setSelectedHistoryItem(item)}>
+                      <button className="ui-button" style={buttonStyle} onClick={() => setSelectedHistoryItem(item)}>
                         <Eye size={16} /> Ver detalle
                       </button>
                     </div>
@@ -1136,7 +1139,7 @@ export default function App() {
                       {selectedHistoryItem.verification_type === "documental" ? "Documental" : "En campo"}
                     </div>
                   </div>
-                  <button style={buttonStyle} onClick={() => setSelectedHistoryItem(null)}>
+                  <button className="ui-button" style={buttonStyle} onClick={() => setSelectedHistoryItem(null)}>
                     Cerrar detalle
                   </button>
                 </div>
@@ -1168,16 +1171,16 @@ export default function App() {
           </div>
         )}
 
-        <div style={box}>
+        <div className="section-card" style={box}>
           <h2 style={{ marginTop: 0 }}>Finalizar inspección</h2>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={primaryButtonStyle} onClick={saveOnline} disabled={isSaving}>
+            <button className="ui-button ui-button--primary" style={primaryButtonStyle} onClick={saveOnline} disabled={isSaving}>
               <Save size={16} /> {isSaving ? "Guardando..." : "Guardar online"}
             </button>
-            <button style={buttonStyle} onClick={saveAndExport} disabled={isSaving}>
+            <button className="ui-button" style={buttonStyle} onClick={saveAndExport} disabled={isSaving}>
               <Download size={16} /> Guardar y exportar
             </button>
-            <button style={buttonStyle} onClick={openMailDraft}>
+            <button className="ui-button" style={buttonStyle} onClick={openMailDraft}>
               <Send size={16} /> Enviar resultados
             </button>
           </div>

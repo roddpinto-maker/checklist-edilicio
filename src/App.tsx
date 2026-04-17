@@ -980,11 +980,7 @@ export default function App() {
                               src={photoPreviewUrl}
                               alt={`Foto del item ${row.item}`}
                             />
-                          ) : (
-                            <div className="photo-panel__placeholder">
-                              <Camera size={18} />
-                            </div>
-                          )}
+                          ) : null}
                           <div className="photo-panel__content">
                             <div className="photo-panel__status">
                               {photoPreviewUrl ? "Foto cargada" : "Sin foto"}

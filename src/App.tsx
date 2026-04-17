@@ -212,6 +212,12 @@ async function uploadPhotoToSupabase(
   return { photoName: file.name, photoPath: objectPath };
 }
 
+function getPhotoPreviewUrl(row: ChecklistRow): string {
+  if (row.photoFile) return "";
+  if (!row.photoPath) return "";
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
+}
+
 function saveJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json;charset=utf-8",
@@ -341,6 +347,7 @@ export default function App() {
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [rows, setRows] = useState<ChecklistRow[]>(() => buildRows("en_campo"));
+  const [interactedRowIds, setInteractedRowIds] = useState<string[]>([]);
   const [historyRows, setHistoryRows] = useState<InspectionHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
@@ -352,6 +359,7 @@ export default function App() {
 
   const metrics = useMemo(() => calculateMetrics(rows), [rows]);
   const findings = useMemo(() => rows.filter((r) => r.status === "no_cumple"), [rows]);
+  const interactedRowSet = useMemo(() => new Set(interactedRowIds), [interactedRowIds]);
 
   const emailValid = recipientEmail.length > 0 && isValidEmail(recipientEmail);
   const emailMatch = recipientEmail.length > 0 && recipientEmail === confirmRecipientEmail;
@@ -404,6 +412,42 @@ export default function App() {
     });
   }, [historyRows, historyPlantFilter, historySectorFilter, historyTypeFilter, historyDateFilter]);
 
+  const photoPreviewUrls = useMemo(() => {
+    return rows.reduce<Record<string, string>>((acc, row) => {
+      if (row.photoFile) {
+        acc[row.id] = URL.createObjectURL(row.photoFile);
+        return acc;
+      }
+
+      const previewUrl = getPhotoPreviewUrl(row);
+      if (previewUrl) acc[row.id] = previewUrl;
+      return acc;
+    }, {});
+  }, [rows]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(photoPreviewUrls).forEach((url) => {
+        if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+      });
+    };
+  }, [photoPreviewUrls]);
+
+  const completedChecklistCount = useMemo(() => {
+    return rows.filter((row) => {
+      return (
+        interactedRowSet.has(row.id) ||
+        row.status !== "cumple" ||
+        Boolean(row.responsible.trim() || row.observation.trim() || row.photoName || row.photoPath)
+      );
+    }).length;
+  }, [rows, interactedRowSet]);
+
+  const checklistProgress = useMemo(() => {
+    if (!rows.length) return 0;
+    return Math.round((completedChecklistCount / rows.length) * 100);
+  }, [completedChecklistCount, rows.length]);
+
   const executiveSummary = useMemo(() => {
     const typeLabel =
       verificationType === "documental" ? "revisión documental" : "verificación en campo";
@@ -446,21 +490,48 @@ export default function App() {
     void loadHistory();
   }, []);
 
+  const markRowInteracted = (rowId: string) => {
+    setInteractedRowIds((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
+  };
+
   const updateRow = (rowId: string, field: keyof ChecklistRow, value: string) => {
     setRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
   };
 
+  const handleRowFieldChange = (rowId: string, field: keyof ChecklistRow, value: string) => {
+    markRowInteracted(rowId);
+    updateRow(rowId, field, value);
+  };
+
+  const handleStatusChange = (rowId: string, status: StatusType) => {
+    markRowInteracted(rowId);
+    updateRow(rowId, "status", status);
+  };
+
   const handlePhotoUpload = (rowId: string, file?: File) => {
     if (!file) return;
+    markRowInteracted(rowId);
     setRows((prev) =>
       prev.map((row) =>
-        row.id === rowId ? { ...row, photoName: file.name, photoFile: file } : row
+        row.id === rowId ? { ...row, photoName: file.name, photoPath: "", photoFile: file } : row
+      )
+    );
+  };
+
+  const handlePhotoRemove = (rowId: string) => {
+    setInteractedRowIds((prev) => prev.filter((id) => id !== rowId));
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === rowId
+          ? { ...row, photoName: "", photoPath: "", photoFile: null }
+          : row
       )
     );
   };
 
   const resetChecklist = () => {
     setRows(buildRows(verificationType));
+    setInteractedRowIds([]);
     setSearch("");
     setSaveMessage("");
     setSaveError("");
@@ -469,6 +540,7 @@ export default function App() {
   const changeType = (value: VerificationType) => {
     setVerificationType(value);
     setRows(buildRows(value));
+    setInteractedRowIds([]);
     setSearch("");
     setSaveMessage("");
     setSaveError("");
@@ -774,26 +846,47 @@ export default function App() {
 
         {activeTab === "checklist" && (
           <div className="section-card" style={box}>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <input
-                style={{ ...inputStyle, maxWidth: 420 }}
+            <div className="checklist-toolbar">
+              <div className="checklist-progress">
+                <div className="checklist-progress__meta">
+                  <span className="checklist-progress__eyebrow">Progreso del checklist</span>
+                  <strong>
+                    {completedChecklistCount} / {rows.length} completados ({checklistProgress}%)
+                  </strong>
+                </div>
+                <div className="checklist-progress__track" aria-hidden="true">
+                  <div className="checklist-progress__fill" style={{ width: `${checklistProgress}%` }} />
+                </div>
+              </div>
+              <div className="checklist-toolbar__controls">
+                <input
+                className="checklist-search"
+                style={{ ...inputStyle, maxWidth: "none" }}
                 placeholder="Buscar por categoría, punto, observación o responsable"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <div style={{ alignSelf: "center", color: "#475569" }}>
+              <div className="checklist-toolbar__summary">
                 Mostrando checklist de:{" "}
                 <strong>{verificationType === "documental" ? "Revisión documental" : "Verificación en campo"}</strong>
               </div>
+            </div>
+
             </div>
 
             <div style={{ display: "grid", gap: 14 }}>
               {filteredRows.map((row) => {
                 const ui = statusUi[row.status];
                 const Icon = ui.Icon;
+                const photoPreviewUrl = photoPreviewUrls[row.id];
+                const rowCompleted =
+                  interactedRowSet.has(row.id) ||
+                  row.status !== "cumple" ||
+                  Boolean(row.responsible.trim() || row.observation.trim() || row.photoName || row.photoPath);
                 return (
                   <div
                     key={row.id}
+                    className={`checklist-item-card ${rowCompleted ? "checklist-item-card--completed" : ""}`}
                     style={{
                       border: "1px solid #e2e8f0",
                       borderRadius: 14,
@@ -850,15 +943,23 @@ export default function App() {
                     >
                       <div>
                         <label style={labelStyle}>Resultado</label>
-                        <select
-                          style={inputStyle}
-                          value={row.status}
-                          onChange={(e) => updateRow(row.id, "status", e.target.value)}
-                        >
-                          <option value="cumple">Cumple</option>
-                          <option value="no_cumple">No cumple</option>
-                          <option value="no_aplica">No aplica</option>
-                        </select>
+                        <div className="status-toggle" role="group" aria-label={`Resultado de ${row.item}`}>
+                          {(Object.entries(statusUi) as [StatusType, (typeof statusUi)[StatusType]][]).map(
+                            ([status, statusOption]) => (
+                              <button
+                                key={status}
+                                type="button"
+                                className={`status-toggle__button ${
+                                  row.status === status ? "status-toggle__button--active" : ""
+                                }`}
+                                data-status={status}
+                                onClick={() => handleStatusChange(row.id, status)}
+                              >
+                                {statusOption.label}
+                              </button>
+                            )
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -866,44 +967,53 @@ export default function App() {
                         <input
                           style={inputStyle}
                           value={row.responsible}
-                          onChange={(e) => updateRow(row.id, "responsible", e.target.value)}
+                          onChange={(e) => handleRowFieldChange(row.id, "responsible", e.target.value)}
                         />
                       </div>
 
-                      <div>
+                      <div className="photo-field">
                         <label style={labelStyle}>Foto</label>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label
-                            style={{
-                              width: 42,
-                              height: 42,
-                              border: "1px solid #cbd5e1",
-                              borderRadius: 12,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                              background: "#fff",
-                            }}
-                          >
-                            <Camera size={18} />
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={(e) => handlePhotoUpload(row.id, e.target.files?.[0])}
+                        <div className={`photo-panel ${photoPreviewUrl ? "photo-panel--filled" : ""}`}>
+                          {photoPreviewUrl ? (
+                            <img
+                              className="photo-panel__preview"
+                              src={photoPreviewUrl}
+                              alt={`Foto del item ${row.item}`}
                             />
-                          </label>
-                          <div
-                            style={{
-                              ...inputStyle,
-                              display: "flex",
-                              alignItems: "center",
-                              color: "#475569",
-                              minHeight: 42,
-                            }}
-                          >
-                            {row.photoName || "Sin foto"}
+                          ) : (
+                            <div className="photo-panel__placeholder">
+                              <Camera size={18} />
+                            </div>
+                          )}
+                          <div className="photo-panel__content">
+                            <div className="photo-panel__status">
+                              {photoPreviewUrl ? "Foto cargada" : "Sin foto"}
+                            </div>
+                            {row.photoName && (
+                              <div className="photo-panel__filename">{row.photoName}</div>
+                            )}
+                            <div className="photo-panel__actions">
+                              <label className="photo-action photo-action--primary">
+                                <Camera size={16} />
+                                {photoPreviewUrl ? "Cambiar foto" : "Agregar foto"}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={(e) => handlePhotoUpload(row.id, e.target.files?.[0])}
+                                />
+                              </label>
+                              {photoPreviewUrl && (
+                                <button
+                                  type="button"
+                                  className="photo-action"
+                                  onClick={() => handlePhotoRemove(row.id)}
+                                >
+                                  <XCircle size={16} />
+                                  Eliminar foto
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -913,7 +1023,7 @@ export default function App() {
                         <textarea
                           style={{ ...inputStyle, minHeight: 90 }}
                           value={row.observation}
-                          onChange={(e) => updateRow(row.id, "observation", e.target.value)}
+                          onChange={(e) => handleRowFieldChange(row.id, "observation", e.target.value)}
                         />
                       </div>
                     </div>

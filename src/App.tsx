@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Save,
   Send,
+  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -289,6 +290,19 @@ function calculateMetrics(rows: ChecklistRow[]): Metrics {
   return { totalApplicable, cumple, noCumple, noAplica, score };
 }
 
+function calculateCriticalMetrics(rows: Array<Pick<ChecklistRow, "criticality" | "status">>) {
+  const applicable = rows.filter(
+    (row) => row.criticality === "critico" && row.status !== "no_aplica"
+  );
+  const totalApplicable = applicable.length;
+  const cumple = applicable.filter((row) => row.status === "cumple").length;
+  return {
+    totalApplicable,
+    cumple,
+    score: totalApplicable ? Math.round((cumple / totalApplicable) * 100) : null,
+  };
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -327,6 +341,24 @@ function getPhotoPreviewUrl(row: ChecklistRow): string {
   if (row.photoFile) return "";
   if (!row.photoPath) return "";
   return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
+}
+
+function getStoredPhotoUrl(row: Pick<PersistedChecklistRow, "photoPath">): string {
+  if (!row.photoPath) return "";
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
+}
+
+function formatCriticalityLabel(criticality: CriticalityType | null) {
+  if (!criticality) return "";
+  return criticality === "critico" ? "Crítico" : "Mayor";
+}
+
+function encodeStoragePath(path: string) {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
 }
 
 function saveJson(filename: string, data: unknown) {
@@ -462,13 +494,16 @@ export default function App() {
   const [historyRows, setHistoryRows] = useState<InspectionHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [historyMessage, setHistoryMessage] = useState("");
   const [historyPlantFilter, setHistoryPlantFilter] = useState("");
   const [historySectorFilter, setHistorySectorFilter] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"todos" | VerificationType>("todos");
   const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<InspectionHistoryRow | null>(null);
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
 
   const metrics = useMemo(() => calculateMetrics(rows), [rows]);
+  const criticalMetrics = useMemo(() => calculateCriticalMetrics(rows), [rows]);
   const findings = useMemo(() => rows.filter((r) => r.status === "no_cumple"), [rows]);
   const interactedRowSet = useMemo(() => new Set(interactedRowIds), [interactedRowIds]);
 
@@ -562,16 +597,21 @@ export default function App() {
   const executiveSummary = useMemo(() => {
     const typeLabel =
       verificationType === "documental" ? "revisión documental" : "verificación en campo";
+    const criticalSummary =
+      criticalMetrics.score === null
+        ? "Cumplimiento críticos: N/A."
+        : `Cumplimiento críticos: ${criticalMetrics.score}%.`;
     return `Inspección de ${typeLabel} en ${plant || "planta"}, sector ${
       sector || "sin sector"
     }. Cumplimiento general ${metrics.score}%. Hallazgos no conformes: ${
       metrics.noCumple
-    }. Puntos no aplicables: ${metrics.noAplica}.`;
-  }, [verificationType, plant, sector, metrics]);
+    }. ${criticalSummary} Puntos no aplicables: ${metrics.noAplica}.`;
+  }, [verificationType, plant, sector, metrics, criticalMetrics.score]);
 
   const loadHistory = async () => {
     setHistoryLoading(true);
     setHistoryError("");
+    setHistoryMessage("");
     try {
       const response = await fetch(
         `${SUPABASE_URL}/rest/v1/inspections?select=*&order=created_at.desc`,
@@ -600,6 +640,70 @@ export default function App() {
   useEffect(() => {
     void loadHistory();
   }, []);
+
+  const deleteInspection = async (item: InspectionHistoryRow) => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de borrar esta inspección? Esta acción no se puede deshacer."
+    );
+    if (!confirmed) return;
+
+    setDeletingHistoryId(item.id);
+    setHistoryError("");
+    setHistoryMessage("");
+
+    const photoPaths = Array.from(
+      new Set(
+        (item.checklist || [])
+          .map((row) => row.photoPath)
+          .filter((path): path is string => Boolean(path))
+      )
+    );
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/inspections?id=eq.${encodeURIComponent(item.id)}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            Prefer: "return=minimal",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("No se pudo borrar la inspección seleccionada.");
+      }
+
+      if (photoPaths.length > 0) {
+        await Promise.allSettled(
+          photoPaths.map(async (photoPath) => {
+            await fetch(
+              `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${encodeStoragePath(photoPath)}`,
+              {
+                method: "DELETE",
+                headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                },
+              }
+            );
+          })
+        );
+      }
+
+      setHistoryRows((prev) => prev.filter((row) => row.id !== item.id));
+      setSelectedHistoryItem((prev) => (prev?.id === item.id ? null : prev));
+      setHistoryMessage("Inspección eliminada correctamente.");
+    } catch (error) {
+      setHistoryError(
+        error instanceof Error ? error.message : "No se pudo borrar la inspección."
+      );
+    } finally {
+      setDeletingHistoryId(null);
+    }
+  };
 
   const markRowInteracted = (rowId: string) => {
     setInteractedRowIds((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
@@ -780,6 +884,24 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="app-layout">
+        <div className="corporate-header">
+          <div className="corporate-header__logo">
+            <div className="corporate-header__logo-placeholder" aria-label="Espacio reservado para logo Dulcor">
+              <span>Dulcor</span>
+              <small>Logo</small>
+            </div>
+          </div>
+          <div className="corporate-header__title-group">
+            <div className="corporate-header__title">Sistema de gestión integrado</div>
+            <div className="corporate-header__subtitle">Lista de control - Estructura edilicias</div>
+          </div>
+          <div className="corporate-header__meta">
+            <div className="corporate-header__meta-item">ID</div>
+            <div className="corporate-header__meta-item">Versión N° 1.0</div>
+            <div className="corporate-header__meta-item">FV 30/04/2026</div>
+          </div>
+        </div>
+
         <div className="app-header">
           <div className="app-header__copy">
             <h1 style={{ margin: 0, fontSize: 42 }}>Checklist de revisión edilicia</h1>
@@ -1177,7 +1299,33 @@ export default function App() {
         {activeTab === "resumen" && (
           <div className="section-card" style={box}>
             <h2 style={{ marginTop: 0 }}>Resumen por categoría</h2>
+            <div className="summary-metrics">
+              <div className="summary-metric-card">
+                <div className="summary-metric-card__label">Cumplimiento total</div>
+                <div className="summary-metric-card__value">{metrics.score}%</div>
+                <div className="summary-metric-card__caption">
+                  {metrics.cumple} de {metrics.totalApplicable} ítems aplicables
+                </div>
+              </div>
+              <div className="summary-metric-card summary-metric-card--critical">
+                <div className="summary-metric-card__label">Cumplimiento críticos</div>
+                <div className="summary-metric-card__value">
+                  {criticalMetrics.score === null ? "N/A" : `${criticalMetrics.score}%`}
+                </div>
+                <div className="summary-metric-card__caption">
+                  {criticalMetrics.score === null
+                    ? "Sin ítems críticos aplicables"
+                    : `${criticalMetrics.cumple} de ${criticalMetrics.totalApplicable} críticos aplicables`}
+                </div>
+              </div>
+              <div className="summary-metric-card summary-metric-card--finding">
+                <div className="summary-metric-card__label">Hallazgos</div>
+                <div className="summary-metric-card__value">{findings.length}</div>
+                <div className="summary-metric-card__caption">Ítems con resultado no cumple</div>
+              </div>
+            </div>
             <div
+              className="summary-category-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
@@ -1185,7 +1333,11 @@ export default function App() {
               }}
             >
               {byCategory.map((cat) => (
-                <div key={cat.category} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}>
+                <div
+                  key={cat.category}
+                  className="summary-category-card"
+                  style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}
+                >
                   <div style={{ fontWeight: 700, marginBottom: 10 }}>{cat.category}</div>
                   <div style={{ marginBottom: 8 }}>
                     Cumplimiento: <strong>{cat.score}%</strong>
@@ -1218,8 +1370,26 @@ export default function App() {
             ) : (
               <div style={{ display: "grid", gap: 12 }}>
                 {findings.map((item) => (
-                  <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>{item.category}</div>
+                  <div
+                    key={item.id}
+                    className="finding-card"
+                    style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}
+                  >
+                    <div className="row-meta">
+                      <span className="row-chip">{item.category}</span>
+                      <span className="row-chip row-chip--code">{item.id}</span>
+                      {item.criticality && (
+                        <span
+                          className={`row-chip ${
+                            item.criticality === "critico"
+                              ? "row-chip--critical"
+                              : "row-chip--secondary"
+                          }`}
+                        >
+                          {formatCriticalityLabel(item.criticality)}
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontWeight: 700, marginBottom: 8 }}>{item.item}</div>
                     <div
                       style={{
@@ -1295,16 +1465,43 @@ export default function App() {
               />
             </div>
 
+            {historyMessage && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "#dcfce7",
+                  color: "#166534",
+                }}
+              >
+                {historyMessage}
+              </div>
+            )}
+
             {historyLoading ? (
               <div style={{ color: "#64748b" }}>Cargando historial...</div>
             ) : historyError ? (
-              <div style={{ color: "#dc2626" }}>{historyError}</div>
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "#fee2e2",
+                  color: "#991b1b",
+                }}
+              >
+                {historyError}
+              </div>
             ) : filteredHistoryRows.length === 0 ? (
               <div style={{ color: "#64748b" }}>No hay inspecciones guardadas todavía.</div>
             ) : (
               <div style={{ display: "grid", gap: 12 }}>
                 {filteredHistoryRows.map((item) => (
-                  <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}>
+                  <div
+                    key={item.id}
+                    className="history-record"
+                    style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                       <div>
                         <div style={{ fontSize: 12, color: "#64748b" }}>
@@ -1353,9 +1550,18 @@ export default function App() {
                       Mail destinatario: {item.email || "—"} · Hallazgos guardados: {item.findings?.length ?? 0}
                     </div>
 
-                    <div style={{ marginTop: 12 }}>
+                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <button className="ui-button" style={buttonStyle} onClick={() => setSelectedHistoryItem(item)}>
                         <Eye size={16} /> Ver detalle
+                      </button>
+                      <button
+                        className="ui-button ui-button--danger"
+                        style={buttonStyle}
+                        onClick={() => void deleteInspection(item)}
+                        disabled={deletingHistoryId === item.id}
+                      >
+                        <Trash2 size={16} />
+                        {deletingHistoryId === item.id ? "Borrando..." : "Borrar"}
                       </button>
                     </div>
                   </div>
@@ -1395,26 +1601,52 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  {(selectedHistoryItem.checklist || []).map((row) => (
-                    <div
-                      key={row.id}
-                      style={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fff",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "#64748b" }}>{row.category}</div>
-                      <div style={{ fontWeight: 700 }}>{row.item}</div>
-                      <div style={{ marginTop: 8 }}>
-                        <strong>Resultado:</strong> {statusUi[row.status].label}
+                  {(selectedHistoryItem.checklist || []).map((row) => {
+                    const detailPhotoUrl = getStoredPhotoUrl(row);
+                    return (
+                      <div
+                        key={row.id}
+                        className="history-detail-row"
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
+                          padding: 12,
+                        }}
+                      >
+                        <div className="row-meta">
+                          <span className="row-chip">{row.category}</span>
+                          <span className="row-chip row-chip--code">{row.id}</span>
+                          {row.criticality && (
+                            <span
+                              className={`row-chip ${
+                                row.criticality === "critico"
+                                  ? "row-chip--critical"
+                                  : "row-chip--secondary"
+                              }`}
+                            >
+                              {formatCriticalityLabel(row.criticality)}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontWeight: 700 }}>{row.item}</div>
+                        <div className="history-detail-row__grid">
+                          <div><strong>Resultado:</strong> {statusUi[row.status].label}</div>
+                          <div><strong>Observación:</strong> {row.observation || "—"}</div>
+                          <div><strong>Responsable:</strong> {row.responsible || "—"}</div>
+                          <div><strong>Foto:</strong> {row.photoName || "—"}</div>
+                        </div>
+                        {detailPhotoUrl && (
+                          <div className="history-photo">
+                            <img
+                              className="history-photo__preview"
+                              src={detailPhotoUrl}
+                              alt={`Foto asociada al ítem ${row.id}`}
+                            />
+                          </div>
+                        )}
                       </div>
-                      <div><strong>Observación:</strong> {row.observation || "—"}</div>
-                      <div><strong>Responsable:</strong> {row.responsible || "—"}</div>
-                      <div><strong>Foto:</strong> {row.photoName || "—"}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

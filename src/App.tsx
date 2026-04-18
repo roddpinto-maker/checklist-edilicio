@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   AlertCircle,
   Camera,
@@ -61,6 +62,8 @@ const SUPABASE_URL = "https://vbtppbpiqkjufxisabaj.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidHBwYnBpcWtqdWZ4aXNhYmFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMDQzNzgsImV4cCI6MjA5MTg4MDM3OH0.RTRLVJtaME9v4c0MPXZJz1z2ePmNJUA-QT5-5zmk4VM";
 const SUPABASE_BUCKET = "inspection-photos";
+const SUPABASE_INSPECTIONS_TABLE = "inspections";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 type ChecklistTemplateItem =
   | string
@@ -613,23 +616,15 @@ export default function App() {
     setHistoryError("");
     setHistoryMessage("");
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/inspections?select=*&order=created_at.desc`,
-        {
-          method: "GET",
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        }
-      );
+      const { data, error } = await supabase
+        .from(SUPABASE_INSPECTIONS_TABLE)
+        .select("*")
+        .order("created_at", { ascending: false });
 
-      if (!response.ok) {
+      if (error) {
         throw new Error("No se pudo cargar el historial de inspecciones.");
       }
-
-      const data = (await response.json()) as InspectionHistoryRow[];
-      setHistoryRows(data);
+      setHistoryRows((data ?? []) as InspectionHistoryRow[]);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : "No se pudo cargar el historial.");
     } finally {
@@ -660,19 +655,12 @@ export default function App() {
     );
 
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/inspections?id=eq.${encodeURIComponent(item.id)}`,
-        {
-          method: "DELETE",
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            Prefer: "return=minimal",
-          },
-        }
-      );
+      const { error } = await supabase
+        .from(SUPABASE_INSPECTIONS_TABLE)
+        .delete()
+        .eq("id", item.id);
 
-      if (!response.ok) {
+      if (error) {
         throw new Error("No se pudo borrar la inspección seleccionada.");
       }
 
@@ -693,7 +681,7 @@ export default function App() {
         );
       }
 
-      setHistoryRows((prev) => prev.filter((row) => row.id !== item.id));
+      await loadHistory();
       setSelectedHistoryItem((prev) => (prev?.id === item.id ? null : prev));
       setHistoryMessage("Inspección eliminada correctamente.");
     } catch (error) {

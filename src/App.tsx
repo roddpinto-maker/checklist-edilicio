@@ -16,6 +16,7 @@ import {
 type VerificationType = "documental" | "en_campo";
 type StatusType = "cumple" | "no_cumple" | "no_aplica";
 type TabType = "checklist" | "resumen" | "hallazgos" | "historial";
+type CriticalityType = "critico" | "mayor";
 
 type Metrics = {
   totalApplicable: number;
@@ -29,6 +30,7 @@ type ChecklistRow = {
   id: string;
   category: string;
   item: string;
+  criticality: CriticalityType | null;
   status: StatusType;
   observation: string;
   responsible: string;
@@ -59,7 +61,15 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidHBwYnBpcWtqdWZ4aXNhYmFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMDQzNzgsImV4cCI6MjA5MTg4MDM3OH0.RTRLVJtaME9v4c0MPXZJz1z2ePmNJUA-QT5-5zmk4VM";
 const SUPABASE_BUCKET = "inspection-photos";
 
-const CHECKLISTS: Record<VerificationType, { category: string; items: string[] }[]> = {
+type ChecklistTemplateItem =
+  | string
+  | {
+      id: string;
+      text: string;
+      criticality: CriticalityType;
+    };
+
+const CHECKLISTS: Record<VerificationType, { category: string; items: ChecklistTemplateItem[] }[]> = {
   documental: [
     {
       category: "General y zonificación",
@@ -122,6 +132,106 @@ const CHECKLISTS: Record<VerificationType, { category: string; items: string[] }
   ],
 };
 
+const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem, string>[] }[] = [
+  {
+    category: "Flujo de personas y tránsito",
+    items: [
+      { id: "FLU-PER-01", text: "El ingreso a zonas de mayor riesgo se realiza a través de filtros sanitarios.", criticality: "critico" },
+      { id: "FLU-PER-02", text: "No se observan cruces entre áreas de distinto nivel higiénico.", criticality: "critico" },
+      { id: "FLU-PER-03", text: "El tránsito de personas se encuentra definido, señalizado y respeta la segregación entre áreas de distinto nivel de riesgo.", criticality: "mayor" },
+      { id: "FLU-PER-04", text: "Las zonas de tránsito están definidas y señalizadas.", criticality: "mayor" },
+      { id: "FLU-PER-05", text: "No se evidencian retrocesos en el flujo de personas.", criticality: "mayor" },
+      { id: "FLU-PER-06", text: "El acceso a áreas críticas está restringido a personal autorizado.", criticality: "mayor" },
+    ],
+  },
+  {
+    category: "Pisos y zócalos",
+    items: [
+      { id: "PIS-ZOC-01", text: "Los pisos presentan superficies lisas, continuas (sin juntas abiertas ni interrupciones) e impermeables.", criticality: "mayor" },
+      { id: "PIS-ZOC-02", text: "Los pisos no presentan grietas, fisuras ni deterioros.", criticality: "mayor" },
+      { id: "PIS-ZOC-03", text: "Los pisos presentan pendiente adecuada hacia drenajes.", criticality: "mayor" },
+      { id: "PIS-ZOC-04", text: "No se observa acumulación de agua.", criticality: "mayor" },
+      { id: "PIS-ZOC-05", text: "Los encuentros piso-pared son de tipo sanitario (media caña: unión curva que evita ángulos rectos y facilita la limpieza).", criticality: "mayor" },
+      { id: "PIS-ZOC-06", text: "Los zócalos presentan superficie lisa y sin aberturas.", criticality: "mayor" },
+      { id: "PIS-ZOC-07", text: "Los zócalos se encuentran sellados, sin grietas ni aberturas.", criticality: "mayor" },
+    ],
+  },
+  {
+    category: "Paredes, techos y condensación",
+    items: [
+      { id: "PAR-TEC-01", text: "Las paredes presentan superficies lisas, continuas (sin juntas abiertas ni interrupciones) e impermeables.", criticality: "mayor" },
+      { id: "PAR-TEC-02", text: "Las paredes no presentan grietas, fisuras ni desprendimientos.", criticality: "critico" },
+      { id: "PAR-TEC-03", text: "Las penetraciones (cañerías, cables, ductos) están selladas.", criticality: "critico" },
+      { id: "PAR-TEC-04", text: "No se observa acumulación de suciedad o humedad en paredes.", criticality: "mayor" },
+      { id: "PAR-TEC-05", text: "Los techos no presentan desprendimientos.", criticality: "critico" },
+      { id: "PAR-TEC-06", text: "No hay evidencia de condensación.", criticality: "critico" },
+      { id: "PAR-TEC-07", text: "No se observan goteos sobre producto, equipos o superficies.", criticality: "critico" },
+    ],
+  },
+  {
+    category: "Drenajes y cierres",
+    items: [
+      { id: "DRE-CIE-01", text: "Los drenajes funcionan correctamente.", criticality: "critico" },
+      { id: "DRE-CIE-02", text: "Los drenajes permiten la evacuación continua de líquidos.", criticality: "critico" },
+      { id: "DRE-CIE-03", text: "Los drenajes presentan pendiente adecuada y no se observa acumulación de agua en desagües o áreas circundantes.", criticality: "mayor" },
+      { id: "DRE-CIE-04", text: "Las rejillas son removibles y limpiables.", criticality: "mayor" },
+      { id: "DRE-CIE-05", text: "Los drenajes cuentan con sistema que evita el retorno de contaminantes.", criticality: "critico" },
+      { id: "DRE-CIE-06", text: "No se observan drenajes ubicados debajo de producto expuesto o superficies críticas.", criticality: "critico" },
+      { id: "DRE-CIE-07", text: "Los drenajes cuentan con rejillas, mallas o sistemas que evitan el paso de sólidos.", criticality: "mayor" },
+    ],
+  },
+  {
+    category: "Puertas y ventanas",
+    items: [
+      { id: "PUE-VENT-01", text: "Las puertas presentan buen ajuste, sin espacios o fugas.", criticality: "critico" },
+      { id: "PUE-VENT-02", text: "Las puertas cuentan con sistema de cierre automático y permanecen cerradas cuando no están en uso.", criticality: "critico" },
+      { id: "PUE-VENT-03", text: "No se utilizan puertas abiertas como medio de ventilación.", criticality: "critico" },
+      { id: "PUE-VENT-04", text: "Las ventanas están selladas o protegidas cuando corresponde.", criticality: "critico" },
+      { id: "PUE-VENT-05", text: "Las ventanas cuentan con protección contra ingreso de plagas.", criticality: "critico" },
+      { id: "PUE-VENT-06", text: "Los vidrios presentan protección en caso de roturas.", criticality: "mayor" },
+      { id: "PUE-VENT-07", text: "El material traslúcido utilizado en ventanas no representa peligro de contaminación en caso de rotura.", criticality: "mayor" },
+      { id: "PUE-VENT-08", text: "Las ventanas están instaladas al ras del borde interior o con inclinación que evita la acumulación de suciedad o plagas.", criticality: "mayor" },
+      { id: "PUE-VENT-09", text: "Los marcos de ventanas están construidos con materiales que evitan la corrosión.", criticality: "mayor" },
+    ],
+  },
+  {
+    category: "Ventilación",
+    items: [
+      { id: "VEN-01", text: "El flujo de aire es desde zonas limpias hacia zonas sucias.", criticality: "critico" },
+      { id: "VEN-02", text: "El aire no impacta directamente sobre producto expuesto.", criticality: "critico" },
+      { id: "VEN-03", text: "Los sistemas de ventilación cuentan con protección contra ingreso de contaminantes.", criticality: "mayor" },
+      { id: "VEN-04", text: "No se observan condiciones que favorezcan contaminación por aire.", criticality: "critico" },
+      { id: "VEN-05", text: "En áreas con extracción de aire, se dispone de sistema de reposición de aire filtrado que evita flujo de aire contaminado hacia el producto.", criticality: "critico" },
+    ],
+  },
+  {
+    category: "Equipos y estructuras",
+    items: [
+      { id: "EQU-EST-01", text: "Los equipos permiten la limpieza, inspección y mantenimiento.", criticality: "mayor" },
+      { id: "EQU-EST-02", text: "Existe separación adecuada entre equipos y superficies.", criticality: "critico" },
+      { id: "EQU-EST-03", text: "No se observan zonas inaccesibles o puntos ciegos.", criticality: "critico" },
+      { id: "EQU-EST-04", text: "Los equipos no están en contacto directo con paredes.", criticality: "critico" },
+      { id: "EQU-EST-05", text: "Las estructuras no presentan huecos ni cavidades.", criticality: "critico" },
+      { id: "EQU-EST-06", text: "Las estructuras no acumulan suciedad ni humedad.", criticality: "critico" },
+      { id: "EQU-EST-07", text: "Las estructuras permiten el drenaje de líquidos.", criticality: "mayor" },
+    ],
+  },
+  {
+    category: "Servicios",
+    items: [
+      { id: "SER-01", text: "La red de agua se encuentra en buen estado y sin fugas.", criticality: "critico" },
+      { id: "SER-02", text: "El aire comprimido no presenta condensación ni contaminación visible.", criticality: "critico" },
+      { id: "SER-03", text: "Las líneas de vapor no presentan pérdidas.", criticality: "critico" },
+      { id: "SER-04", text: "Las instalaciones no generan riesgo de contaminación sobre producto.", criticality: "critico" },
+      { id: "SER-05", text: "Las conexiones eléctricas están protegidas y no acumulan suciedad.", criticality: "mayor" },
+    ],
+  },
+];
+
+function getChecklistGroups(type: VerificationType) {
+  return type === "en_campo" ? FIELD_CHECKLIST : CHECKLISTS.documental;
+}
+
 const statusUi: Record<
   StatusType,
   { label: string; color: string; Icon: typeof CheckCircle2 }
@@ -145,11 +255,12 @@ function sanitizeFileName(value: string): string {
 }
 
 function buildRows(type: VerificationType): ChecklistRow[] {
-  return CHECKLISTS[type].flatMap((group, gi) =>
+  return getChecklistGroups(type).flatMap((group, gi) =>
     group.items.map((item, ii) => ({
-      id: `${type}-${gi}-${ii}-${slugify(item).slice(0, 18)}`,
+      id: typeof item === "string" ? `${type}-${gi}-${ii}-${slugify(item).slice(0, 18)}` : item.id,
       category: group.category,
-      item,
+      item: typeof item === "string" ? item : item.text,
+      criticality: typeof item === "string" ? null : item.criticality,
       status: "cumple",
       observation: "",
       responsible: "",
@@ -380,7 +491,7 @@ export default function App() {
   }, [rows, search]);
 
   const byCategory = useMemo(() => {
-    return CHECKLISTS[verificationType].map((group) => {
+    return getChecklistGroups(verificationType).map((group) => {
       const groupRows = rows.filter(
         (row) => row.category === group.category && row.status !== "no_aplica"
       );
@@ -904,17 +1015,50 @@ export default function App() {
                       }}
                     >
                       <div>
-                        <div
-                          style={{
-                            display: "inline-block",
-                            fontSize: 12,
-                            padding: "4px 8px",
-                            background: "#f1f5f9",
-                            borderRadius: 999,
-                            marginBottom: 8,
-                          }}
-                        >
-                          {row.category}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                          <div
+                            style={{
+                              display: "inline-block",
+                              fontSize: 12,
+                              padding: "4px 8px",
+                              background: "#f1f5f9",
+                              borderRadius: 999,
+                            }}
+                          >
+                            {row.category}
+                          </div>
+                          {row.criticality && (
+                            <>
+                              <div
+                                style={{
+                                  display: "inline-block",
+                                  fontSize: 12,
+                                  padding: "4px 8px",
+                                  background: "#fff",
+                                  border: "1px solid #cbd5e1",
+                                  borderRadius: 999,
+                                  color: "#475569",
+                                  fontFamily: "ui-monospace, Consolas, monospace",
+                                }}
+                              >
+                                {row.id}
+                              </div>
+                              <div
+                                style={{
+                                  display: "inline-block",
+                                  fontSize: 12,
+                                  padding: "4px 8px",
+                                  background: row.criticality === "critico" ? "#fee2e2" : "#f8fafc",
+                                  border: `1px solid ${row.criticality === "critico" ? "#fca5a5" : "#cbd5e1"}`,
+                                  borderRadius: 999,
+                                  color: row.criticality === "critico" ? "#b91c1c" : "#475569",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {row.criticality === "critico" ? "Crítico" : "Mayor"}
+                              </div>
+                            </>
+                          )}
                         </div>
                         <div style={{ fontWeight: 700, fontSize: 18 }}>{row.item}</div>
                       </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import dulcorLogo from "./assets/logo-dulcor-alimentos.jpg";
 import {
   AlertCircle,
   Camera,
@@ -874,10 +875,11 @@ export default function App() {
       <div className="app-layout">
         <div className="corporate-header">
           <div className="corporate-header__logo">
-            <div className="corporate-header__logo-placeholder" aria-label="Espacio reservado para logo Dulcor">
-              <span>Dulcor</span>
-              <small>Logo</small>
-            </div>
+            <img
+              className="corporate-header__logo-image"
+              src={dulcorLogo}
+              alt="Dulcor alimentos"
+            />
           </div>
           <div className="corporate-header__title-group">
             <div className="corporate-header__title">Sistema de gestión integrado</div>
@@ -890,13 +892,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="app-header">
-          <div className="app-header__copy">
-            <h1 style={{ margin: 0, fontSize: 42 }}>Checklist de revisión edilicia</h1>
-            <p style={{ marginTop: 8, color: "#475569" }}>
-              Relevamiento de condiciones edilicias con checklist dinámico según tipo de verificación.
-            </p>
-          </div>
+        <div className="app-header app-header--actions-only">
           <div className="app-header__actions">
             <button className="ui-button ui-button--header" style={buttonStyle} onClick={resetChecklist}>
               <RotateCcw size={16} /> Reiniciar

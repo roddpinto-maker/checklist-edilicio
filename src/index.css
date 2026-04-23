@@ -116,12 +116,11 @@ p {
 
 .corporate-header {
   display: grid;
-  grid-template-columns: minmax(0, 180px) minmax(0, 1fr) minmax(0, 220px);
+  grid-template-columns: clamp(92px, 18vw, 168px) minmax(0, 1fr) clamp(104px, 21vw, 188px);
   border: 1px solid #cbd5e1;
-  border-radius: 24px;
+  border-radius: 0;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  background: #fff;
 }
 
 .corporate-header__logo,
@@ -134,33 +133,15 @@ p {
 .corporate-header__logo {
   display: grid;
   place-items: center;
-  padding: 18px;
+  padding: 8px 10px;
   border-right: 1px solid #cbd5e1;
 }
 
-.corporate-header__logo-placeholder {
-  display: grid;
-  place-items: center;
-  width: min(132px, 100%);
-  aspect-ratio: 1.45;
-  border-radius: 28px;
-  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
-  color: #fff;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
-}
-
-.corporate-header__logo-placeholder span {
-  font-size: 30px;
-  line-height: 1;
-}
-
-.corporate-header__logo-placeholder small {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.corporate-header__logo-image {
+  display: block;
+  width: min(100%, 110px);
+  max-height: 60px;
+  object-fit: contain;
 }
 
 .corporate-header__title-group {
@@ -174,26 +155,28 @@ p {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 54px;
-  padding: 12px 18px;
+  min-height: 38px;
+  padding: 6px 10px;
   text-align: center;
   color: #0f172a;
+  line-height: 1.15;
 }
 
 .corporate-header__title {
   border-bottom: 1px solid #cbd5e1;
-  font-size: clamp(18px, 2vw, 20px);
+  font-size: clamp(13px, 1.7vw, 17px);
   font-weight: 600;
 }
 
 .corporate-header__subtitle {
-  font-size: clamp(18px, 2vw, 20px);
+  font-size: clamp(13px, 1.7vw, 17px);
   font-weight: 500;
 }
 
 .corporate-header__meta {
   display: grid;
   border-left: 1px solid #cbd5e1;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
 }
 
 .corporate-header__meta-item + .corporate-header__meta-item {
@@ -201,28 +184,8 @@ p {
 }
 
 .app-header {
-  display: grid;
-  gap: 16px;
-  align-items: end;
-}
-
-.app-header__copy {
-  min-width: 0;
-}
-
-.app-header__copy h1 {
-  margin: 0 !important;
-  font-size: clamp(28px, 4vw, 36px) !important;
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-}
-
-.app-header__copy p {
-  margin-top: 6px !important;
-  max-width: 720px;
-  color: #475569 !important;
-  font-size: clamp(14px, 1.6vw, 16px);
-  line-height: 1.55;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .app-header__actions {
@@ -230,6 +193,10 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   width: min(100%, 360px);
+}
+
+.app-header--actions-only {
+  margin-top: -6px;
 }
 
 .section-card {
@@ -793,11 +760,7 @@ p {
 
 @media (min-width: 768px) {
   .corporate-header {
-    grid-template-columns: minmax(0, 180px) minmax(0, 1fr) minmax(0, 240px);
-  }
-
-  .app-header {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: clamp(110px, 16vw, 170px) minmax(0, 1fr) clamp(120px, 18vw, 210px);
   }
 
   .app-header__actions {
@@ -837,20 +800,7 @@ p {
   }
 
   .corporate-header {
-    grid-template-columns: 1fr;
-  }
-
-  .corporate-header__logo,
-  .corporate-header__meta {
-    border: 0;
-  }
-
-  .corporate-header__logo {
-    border-bottom: 1px solid #cbd5e1;
-  }
-
-  .corporate-header__meta {
-    border-top: 1px solid #cbd5e1;
+    grid-template-columns: 86px minmax(0, 1fr) 110px;
   }
 
   .app-shell {
@@ -871,6 +821,37 @@ p {
 
   .app-header__actions {
     width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .app-header--actions-only {
+    margin-top: -2px;
+  }
+
+  .corporate-header__logo {
+    padding: 6px;
+  }
+
+  .corporate-header__logo-image {
+    width: 72px;
+    max-height: 42px;
+  }
+
+  .corporate-header__title,
+  .corporate-header__subtitle,
+  .corporate-header__meta-item {
+    min-height: 30px;
+    padding: 4px 6px;
+  }
+
+  .corporate-header__title,
+  .corporate-header__subtitle {
+    font-size: 11px;
+  }
+
+  .corporate-header__meta-item {
+    font-size: 10px;
   }
 
   .checklist-toolbar {
@@ -951,6 +932,10 @@ p {
   .section-card {
     background: #fff !important;
     border-color: #dbe3ee !important;
+  }
+
+  .app-header--actions-only {
+    margin-top: 0;
   }
 }
 

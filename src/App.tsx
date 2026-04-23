@@ -357,14 +357,6 @@ function formatCriticalityLabel(criticality: CriticalityType | null) {
   return criticality === "critico" ? "Crítico" : "Mayor";
 }
 
-function encodeStoragePath(path: string) {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
-
 function saveJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json;charset=utf-8",
@@ -623,10 +615,12 @@ export default function App() {
         .order("created_at", { ascending: false });
 
       if (error) {
+        console.error("Error cargando historial desde Supabase:", error);
         throw new Error("No se pudo cargar el historial de inspecciones.");
       }
       setHistoryRows((data ?? []) as InspectionHistoryRow[]);
     } catch (error) {
+      console.error("Fallo al cargar historial:", error);
       setHistoryError(error instanceof Error ? error.message : "No se pudo cargar el historial.");
     } finally {
       setHistoryLoading(false);
@@ -656,36 +650,60 @@ export default function App() {
     );
 
     try {
-      const { error } = await supabase
+      const { data: deletedRows, error: deleteError } = await supabase
         .from(SUPABASE_INSPECTIONS_TABLE)
         .delete()
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .select("id");
 
-      if (error) {
+      if (deleteError) {
+        console.error("Error eliminando inspección en Supabase:", deleteError);
         throw new Error("No se pudo borrar la inspección seleccionada.");
       }
 
-      if (photoPaths.length > 0) {
-        await Promise.allSettled(
-          photoPaths.map(async (photoPath) => {
-            await fetch(
-              `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${encodeStoragePath(photoPath)}`,
-              {
-                method: "DELETE",
-                headers: {
-                  apikey: SUPABASE_ANON_KEY,
-                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                },
-              }
-            );
-          })
+      if (!deletedRows || deletedRows.length === 0) {
+        console.error(
+          "Delete sin filas afectadas. Posible RLS o id inexistente.",
+          { table: SUPABASE_INSPECTIONS_TABLE, id: item.id }
         );
+        throw new Error(
+          "No se pudo borrar la inspección en Supabase. Revisá permisos RLS o el id del registro."
+        );
+      }
+
+      if (photoPaths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from(SUPABASE_BUCKET)
+          .remove(photoPaths);
+
+        if (storageError) {
+          console.error("La inspección se borró, pero falló la limpieza de Storage:", storageError);
+        }
+      }
+
+      const { data: remainingRows, error: verifyError } = await supabase
+        .from(SUPABASE_INSPECTIONS_TABLE)
+        .select("id")
+        .eq("id", item.id);
+
+      if (verifyError) {
+        console.error("Error verificando delete en Supabase:", verifyError);
+        throw new Error("Se borró la inspección, pero falló la verificación contra Supabase.");
+      }
+
+      if (remainingRows && remainingRows.length > 0) {
+        console.error("El registro sigue existiendo después del delete:", {
+          table: SUPABASE_INSPECTIONS_TABLE,
+          id: item.id,
+        });
+        throw new Error("La inspección sigue existiendo en la base después del intento de borrado.");
       }
 
       await loadHistory();
       setSelectedHistoryItem((prev) => (prev?.id === item.id ? null : prev));
       setHistoryMessage("Inspección eliminada correctamente.");
     } catch (error) {
+      console.error("Fallo al eliminar inspección:", error);
       setHistoryError(
         error instanceof Error ? error.message : "No se pudo borrar la inspección."
       );

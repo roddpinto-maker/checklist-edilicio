@@ -19,7 +19,7 @@ import {
 type VerificationType = "documental" | "en_campo";
 type StatusType = "cumple" | "no_cumple" | "no_aplica";
 type TabType = "checklist" | "resumen" | "hallazgos" | "historial";
-type CriticalityType = "critico" | "mayor";
+type CriticalityType = "critico" | "mayor" | "menor";
 
 type Metrics = {
   totalApplicable: number;
@@ -141,7 +141,7 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
   {
     category: "Flujo de personas y tránsito",
     items: [
-      { id: "FLU-PER-01", text: "El ingreso a zonas de mayor riesgo se realiza a través de filtros sanitarios.", criticality: "critico" },
+      { id: "FLU-PER-01", text: "El ingreso a zonas de mayor riesgo se realiza a través de filtros sanitarios.", criticality: "mayor" },
       { id: "FLU-PER-02", text: "No se observan cruces entre áreas de distinto nivel higiénico.", criticality: "critico" },
       { id: "FLU-PER-03", text: "El tránsito de personas se encuentra definido, señalizado y respeta la segregación entre áreas de distinto nivel de riesgo.", criticality: "mayor" },
       { id: "FLU-PER-04", text: "Las zonas de tránsito están definidas y señalizadas.", criticality: "mayor" },
@@ -165,10 +165,10 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
     category: "Paredes, techos y condensación",
     items: [
       { id: "PAR-TEC-01", text: "Las paredes presentan superficies lisas, continuas (sin juntas abiertas ni interrupciones) e impermeables.", criticality: "mayor" },
-      { id: "PAR-TEC-02", text: "Las paredes no presentan grietas, fisuras ni desprendimientos.", criticality: "critico" },
-      { id: "PAR-TEC-03", text: "Las penetraciones (cañerías, cables, ductos) están selladas.", criticality: "critico" },
+      { id: "PAR-TEC-02", text: "Las paredes no presentan grietas, fisuras ni desprendimientos.", criticality: "mayor" },
+      { id: "PAR-TEC-03", text: "Las penetraciones (cañerías, cables, ductos) están selladas.", criticality: "mayor" },
       { id: "PAR-TEC-04", text: "No se observa acumulación de suciedad o humedad en paredes.", criticality: "mayor" },
-      { id: "PAR-TEC-05", text: "Los techos no presentan desprendimientos.", criticality: "critico" },
+      { id: "PAR-TEC-05", text: "Los techos no presentan desprendimientos.", criticality: "mayor" },
       { id: "PAR-TEC-06", text: "No hay evidencia de condensación.", criticality: "critico" },
       { id: "PAR-TEC-07", text: "No se observan goteos sobre producto, equipos o superficies.", criticality: "critico" },
     ],
@@ -188,15 +188,15 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
   {
     category: "Puertas y ventanas",
     items: [
-      { id: "PUE-VENT-01", text: "Las puertas presentan buen ajuste, sin espacios o fugas.", criticality: "critico" },
-      { id: "PUE-VENT-02", text: "Las puertas cuentan con sistema de cierre automático y permanecen cerradas cuando no están en uso.", criticality: "critico" },
-      { id: "PUE-VENT-03", text: "No se utilizan puertas abiertas como medio de ventilación.", criticality: "critico" },
-      { id: "PUE-VENT-04", text: "Las ventanas están selladas o protegidas cuando corresponde.", criticality: "critico" },
-      { id: "PUE-VENT-05", text: "Las ventanas cuentan con protección contra ingreso de plagas.", criticality: "critico" },
+      { id: "PUE-VENT-01", text: "Las puertas presentan buen ajuste, sin espacios o fugas.", criticality: "mayor" },
+      { id: "PUE-VENT-02", text: "Las puertas cuentan con sistema de cierre automático y permanecen cerradas cuando no están en uso.", criticality: "mayor" },
+      { id: "PUE-VENT-03", text: "No se utilizan puertas abiertas como medio de ventilación.", criticality: "mayor" },
+      { id: "PUE-VENT-04", text: "Las ventanas están selladas o protegidas cuando corresponde.", criticality: "mayor" },
+      { id: "PUE-VENT-05", text: "Las ventanas cuentan con protección contra ingreso de plagas.", criticality: "mayor" },
       { id: "PUE-VENT-06", text: "Los vidrios presentan protección en caso de roturas.", criticality: "mayor" },
       { id: "PUE-VENT-07", text: "El material traslúcido utilizado en ventanas no representa peligro de contaminación en caso de rotura.", criticality: "mayor" },
-      { id: "PUE-VENT-08", text: "Las ventanas están instaladas al ras del borde interior o con inclinación que evita la acumulación de suciedad o plagas.", criticality: "mayor" },
-      { id: "PUE-VENT-09", text: "Los marcos de ventanas están construidos con materiales que evitan la corrosión.", criticality: "mayor" },
+      { id: "PUE-VENT-08", text: "Las ventanas están instaladas al ras del borde interior o con inclinación que evita la acumulación de suciedad o plagas.", criticality: "menor" },
+      { id: "PUE-VENT-09", text: "Los marcos de ventanas están construidos con materiales que evitan la corrosión.", criticality: "menor" },
     ],
   },
   {
@@ -205,7 +205,7 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
       { id: "VEN-01", text: "El flujo de aire es desde zonas limpias hacia zonas sucias.", criticality: "critico" },
       { id: "VEN-02", text: "El aire no impacta directamente sobre producto expuesto.", criticality: "critico" },
       { id: "VEN-03", text: "Los sistemas de ventilación cuentan con protección contra ingreso de contaminantes.", criticality: "mayor" },
-      { id: "VEN-04", text: "No se observan condiciones que favorezcan contaminación por aire.", criticality: "critico" },
+      { id: "VEN-04", text: "No se observan condiciones que favorezcan contaminación por aire.", criticality: "mayor" },
       { id: "VEN-05", text: "En áreas con extracción de aire, se dispone de sistema de reposición de aire filtrado que evita flujo de aire contaminado hacia el producto.", criticality: "critico" },
     ],
   },
@@ -213,22 +213,22 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
     category: "Equipos y estructuras",
     items: [
       { id: "EQU-EST-01", text: "Los equipos permiten la limpieza, inspección y mantenimiento.", criticality: "mayor" },
-      { id: "EQU-EST-02", text: "Existe separación adecuada entre equipos y superficies.", criticality: "critico" },
+      { id: "EQU-EST-02", text: "Existe separación adecuada entre equipos y superficies.", criticality: "mayor" },
       { id: "EQU-EST-03", text: "No se observan zonas inaccesibles o puntos ciegos.", criticality: "critico" },
-      { id: "EQU-EST-04", text: "Los equipos no están en contacto directo con paredes.", criticality: "critico" },
+      { id: "EQU-EST-04", text: "Los equipos no están en contacto directo con paredes.", criticality: "mayor" },
       { id: "EQU-EST-05", text: "Las estructuras no presentan huecos ni cavidades.", criticality: "critico" },
-      { id: "EQU-EST-06", text: "Las estructuras no acumulan suciedad ni humedad.", criticality: "critico" },
+      { id: "EQU-EST-06", text: "Las estructuras no acumulan suciedad ni humedad.", criticality: "mayor" },
       { id: "EQU-EST-07", text: "Las estructuras permiten el drenaje de líquidos.", criticality: "mayor" },
     ],
   },
   {
     category: "Servicios",
     items: [
-      { id: "SER-01", text: "La red de agua se encuentra en buen estado y sin fugas.", criticality: "critico" },
+      { id: "SER-01", text: "La red de agua se encuentra en buen estado y sin fugas.", criticality: "mayor" },
       { id: "SER-02", text: "El aire comprimido no presenta condensación ni contaminación visible.", criticality: "critico" },
-      { id: "SER-03", text: "Las líneas de vapor no presentan pérdidas.", criticality: "critico" },
-      { id: "SER-04", text: "Las instalaciones no generan riesgo de contaminación sobre producto.", criticality: "critico" },
-      { id: "SER-05", text: "Las conexiones eléctricas están protegidas y no acumulan suciedad.", criticality: "mayor" },
+      { id: "SER-03", text: "Las líneas de vapor no presentan pérdidas.", criticality: "mayor" },
+      { id: "SER-04", text: "Las instalaciones no generan riesgo de contaminación sobre producto.", criticality: "mayor" },
+      { id: "SER-05", text: "Las conexiones eléctricas están protegidas y no acumulan suciedad.", criticality: "menor" },
     ],
   },
 ];
@@ -347,14 +347,41 @@ function getPhotoPreviewUrl(row: ChecklistRow): string {
   return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
 }
 
-function getStoredPhotoUrl(row: Pick<PersistedChecklistRow, "photoPath">): string {
-  if (!row.photoPath) return "";
-  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
-}
-
 function formatCriticalityLabel(criticality: CriticalityType | null) {
   if (!criticality) return "";
-  return criticality === "critico" ? "Crítico" : "Mayor";
+  if (criticality === "critico") return "Crítico";
+  if (criticality === "menor") return "Menor";
+  return "Mayor";
+}
+
+function getCriticalityChipClassName(criticality: CriticalityType | null) {
+  if (criticality === "critico") return "row-chip row-chip--critical";
+  if (criticality === "menor") return "row-chip row-chip--minor";
+  return "row-chip row-chip--secondary";
+}
+
+function getCriticalityBadgeStyle(criticality: CriticalityType | null): React.CSSProperties {
+  if (criticality === "critico") {
+    return {
+      background: "#fee2e2",
+      border: "1px solid #fca5a5",
+      color: "#b91c1c",
+    };
+  }
+
+  if (criticality === "menor") {
+    return {
+      background: "#eef2ff",
+      border: "1px solid #c7d2fe",
+      color: "#4338ca",
+    };
+  }
+
+  return {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    color: "#475569",
+  };
 }
 
 function saveJson(filename: string, data: unknown) {
@@ -497,6 +524,7 @@ export default function App() {
   const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<InspectionHistoryRow | null>(null);
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
+  const [historyPhotoUrls, setHistoryPhotoUrls] = useState<Record<string, string>>({});
 
   const metrics = useMemo(() => calculateMetrics(rows), [rows]);
   const criticalMetrics = useMemo(() => calculateCriticalMetrics(rows), [rows]);
@@ -574,6 +602,53 @@ export default function App() {
       });
     };
   }, [photoPreviewUrls]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const photoPaths = Array.from(
+      new Set(
+        historyRows.flatMap((item) =>
+          (item.checklist || [])
+            .map((row) => row.photoPath)
+            .filter((path): path is string => Boolean(path))
+        )
+      )
+    );
+
+    if (photoPaths.length === 0) {
+      setHistoryPhotoUrls({});
+      return;
+    }
+
+    const resolveHistoryPhotoUrls = async () => {
+      const { data, error } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .createSignedUrls(photoPaths, 60 * 60);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("No se pudieron resolver las URLs firmadas del historial:", error);
+        setHistoryPhotoUrls({});
+        return;
+      }
+
+      const nextUrls = Object.fromEntries(
+        (data ?? [])
+          .filter((item) => Boolean(item.path && item.signedUrl))
+          .map((item) => [item.path as string, item.signedUrl as string])
+      );
+
+      setHistoryPhotoUrls(nextUrls);
+    };
+
+    void resolveHistoryPhotoUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [historyRows]);
 
   const completedChecklistCount = useMemo(() => {
     return rows.filter((row) => {
@@ -904,9 +979,9 @@ export default function App() {
             <div className="corporate-header__subtitle">Lista de control - Estructura edilicias</div>
           </div>
           <div className="corporate-header__meta">
-            <div className="corporate-header__meta-item">ID</div>
-            <div className="corporate-header__meta-item">Versión N° 1.0</div>
-            <div className="corporate-header__meta-item">FV 30/04/2026</div>
+            <div className="corporate-header__meta-item">R-CO-PY-002</div>
+            <div className="corporate-header__meta-item">{"Versi\u00F3n N\u00B0 1.0"}</div>
+            <div className="corporate-header__meta-item">FV 23/04/2026</div>
           </div>
         </div>
 
@@ -1172,14 +1247,12 @@ export default function App() {
                                   display: "inline-block",
                                   fontSize: 12,
                                   padding: "4px 8px",
-                                  background: row.criticality === "critico" ? "#fee2e2" : "#f8fafc",
-                                  border: `1px solid ${row.criticality === "critico" ? "#fca5a5" : "#cbd5e1"}`,
                                   borderRadius: 999,
-                                  color: row.criticality === "critico" ? "#b91c1c" : "#475569",
                                   fontWeight: 700,
+                                  ...getCriticalityBadgeStyle(row.criticality),
                                 }}
                               >
-                                {row.criticality === "critico" ? "Crítico" : "Mayor"}
+                                {formatCriticalityLabel(row.criticality)}
                               </div>
                             </>
                           )}
@@ -1381,13 +1454,7 @@ export default function App() {
                       <span className="row-chip">{item.category}</span>
                       <span className="row-chip row-chip--code">{item.id}</span>
                       {item.criticality && (
-                        <span
-                          className={`row-chip ${
-                            item.criticality === "critico"
-                              ? "row-chip--critical"
-                              : "row-chip--secondary"
-                          }`}
-                        >
+                        <span className={getCriticalityChipClassName(item.criticality)}>
                           {formatCriticalityLabel(item.criticality)}
                         </span>
                       )}
@@ -1400,9 +1467,9 @@ export default function App() {
                         gap: 10,
                       }}
                     >
-                      <div><strong>Observación:</strong> {item.observation || "—"}</div>
-                      <div><strong>Responsable:</strong> {item.responsible || "—"}</div>
-                      <div><strong>Foto:</strong> {item.photoName || "—"}</div>
+                      <div><strong>Observación:</strong> {item.observation || "-"}</div>
+                      <div><strong>Responsable:</strong> {item.responsible || "-"}</div>
+                      <div><strong>Foto:</strong> {item.photoName || "-"}</div>
                     </div>
                   </div>
                 ))}
@@ -1513,11 +1580,11 @@ export default function App() {
                           {item.company || "Sin empresa"} · {item.plant || "Sin planta"}
                         </div>
                         <div style={{ color: "#475569" }}>
-                          Sector: {item.sector || "—"} · Auditor: {item.auditor || "—"}
+                          Sector: {item.sector || "-"} · Auditor: {item.auditor || "-"}
                         </div>
                       </div>
                       <div style={{ color: "#475569", fontSize: 14 }}>
-                        <div>Fecha inspección: {item.inspection_date || "—"}</div>
+                        <div>Fecha inspección: {item.inspection_date || "-"}</div>
                         <div>Guardado: {new Date(item.created_at).toLocaleString()}</div>
                       </div>
                     </div>
@@ -1549,7 +1616,7 @@ export default function App() {
                     </div>
 
                     <div style={{ marginTop: 10, color: "#475569" }}>
-                      Mail destinatario: {item.email || "—"} · Hallazgos guardados: {item.findings?.length ?? 0}
+                      Mail destinatario: {item.email || "-"} · Hallazgos guardados: {item.findings?.length ?? 0}
                     </div>
 
                     <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1604,7 +1671,7 @@ export default function App() {
 
                 <div style={{ display: "grid", gap: 10 }}>
                   {(selectedHistoryItem.checklist || []).map((row) => {
-                    const detailPhotoUrl = getStoredPhotoUrl(row);
+                    const detailPhotoUrl = row.photoPath ? historyPhotoUrls[row.photoPath] || "" : "";
                     return (
                       <div
                         key={row.id}
@@ -1619,13 +1686,7 @@ export default function App() {
                           <span className="row-chip">{row.category}</span>
                           <span className="row-chip row-chip--code">{row.id}</span>
                           {row.criticality && (
-                            <span
-                              className={`row-chip ${
-                                row.criticality === "critico"
-                                  ? "row-chip--critical"
-                                  : "row-chip--secondary"
-                              }`}
-                            >
+                            <span className={getCriticalityChipClassName(row.criticality)}>
                               {formatCriticalityLabel(row.criticality)}
                             </span>
                           )}
@@ -1633,19 +1694,23 @@ export default function App() {
                         <div style={{ fontWeight: 700 }}>{row.item}</div>
                         <div className="history-detail-row__grid">
                           <div><strong>Resultado:</strong> {statusUi[row.status].label}</div>
-                          <div><strong>Observación:</strong> {row.observation || "—"}</div>
-                          <div><strong>Responsable:</strong> {row.responsible || "—"}</div>
-                          <div><strong>Foto:</strong> {row.photoName || "—"}</div>
+                          <div><strong>Observación:</strong> {row.observation || "-"}</div>
+                          <div><strong>Responsable:</strong> {row.responsible || "-"}</div>
+                          <div><strong>Foto:</strong> {row.photoName || "-"}</div>
                         </div>
-                        {detailPhotoUrl && (
+                        {detailPhotoUrl ? (
                           <div className="history-photo">
                             <img
                               className="history-photo__preview"
                               src={detailPhotoUrl}
-                              alt={`Foto asociada al ítem ${row.id}`}
+                              alt={`Foto asociada al item ${row.id}`}
                             />
                           </div>
-                        )}
+                        ) : row.photoPath ? (
+                          <div className="history-photo history-photo--fallback">
+                            {row.photoName ? `Foto guardada: ${row.photoName}` : "Foto no disponible"}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

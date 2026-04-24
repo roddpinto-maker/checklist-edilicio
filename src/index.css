@@ -52,6 +52,14 @@
   }
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 #root {
   width: 100%;
   max-width: 100%;
@@ -100,11 +108,14 @@ p {
 }
 
 .app-shell {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   padding: clamp(14px, 2vw, 28px);
   font-family: 'Segoe UI', system-ui, sans-serif;
   color: #0f172a;
   box-sizing: border-box;
+  overflow-x: clip;
 }
 
 .app-layout {
@@ -112,6 +123,10 @@ p {
   margin: 0 auto;
   display: grid;
   gap: clamp(16px, 2vw, 22px);
+}
+
+.app-layout > * {
+  min-width: 0;
 }
 
 .corporate-header {
@@ -589,6 +604,12 @@ p {
   color: #475569;
 }
 
+.row-chip--minor {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+}
+
 .status-toggle {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -758,6 +779,19 @@ p {
   background: #e2e8f0;
 }
 
+.history-photo--fallback {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 @media (min-width: 768px) {
   .corporate-header {
     grid-template-columns: clamp(110px, 16vw, 170px) minmax(0, 1fr) clamp(120px, 18vw, 210px);
@@ -852,6 +886,11 @@ p {
 
   .corporate-header__meta-item {
     font-size: 10px;
+  }
+
+  .history-photo__preview {
+    width: 100%;
+    max-width: 100%;
   }
 
   .checklist-toolbar {

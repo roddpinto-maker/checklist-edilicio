@@ -61,6 +61,14 @@ type ChecklistRow = {
 
 type PersistedChecklistRow = Omit<ChecklistRow, "photoFile">;
 
+type HistoryChecklistRow = Partial<PersistedChecklistRow> & {
+  status: StatusType;
+  findingSeverity?: string | null;
+  findingType?: string | null;
+  commitmentDate?: string | null;
+  findingStatus?: string | null;
+};
+
 type InspectionHistoryRow = {
   id: string;
   created_at: string;
@@ -72,8 +80,8 @@ type InspectionHistoryRow = {
   verification_type: VerificationType;
   email: string | null;
   summary: Partial<Metrics> | null;
-  findings: PersistedChecklistRow[] | null;
-  checklist: PersistedChecklistRow[] | null;
+  findings: HistoryChecklistRow[];
+  checklist: HistoryChecklistRow[];
 };
 
 type InspectionPayload = {
@@ -233,10 +241,33 @@ function sanitizeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
+function warnOnDuplicateChecklistIds(
+  type: VerificationType,
+  groups: ChecklistTemplateGroup[]
+) {
+  const seen = new Set<string>();
+
+  groups.forEach((group) => {
+    group.items.forEach((item) => {
+      if (seen.has(item.id)) {
+        console.warn(
+          `Checklist ${type}: ID duplicado detectado "${item.id}". Revisá la definición del checklist.`
+        );
+        return;
+      }
+
+      seen.add(item.id);
+    });
+  });
+}
+
 function buildRows(type: VerificationType): ChecklistRow[] {
   let visibleNumber = 1;
+  const groups = getChecklistGroups(type);
 
-  return getChecklistGroups(type).flatMap((group) =>
+  warnOnDuplicateChecklistIds(type, groups);
+
+  return groups.flatMap((group) =>
     group.items.map((item) => ({
       id: item.id,
       number: visibleNumber++,
@@ -301,26 +332,22 @@ async function uploadPhotoToSupabase(
   inspectionId: string,
   rowId: string
 ): Promise<{ photoName: string; photoPath: string }> {
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-  const fileName = `${rowId}-${Date.now()}.${ext}`;
-  const objectPath = `${inspectionId}/${sanitizeFileName(fileName)}`;
+  if (!(file instanceof File)) {
+    throw new Error("El archivo de foto no es válido.");
+  }
 
-  const response = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${objectPath}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": file.type || "application/octet-stream",
-        "x-upsert": "true",
-      },
-      body: file,
-    }
-  );
+  const safeOriginalName = sanitizeFileName(file.name || "foto");
+  const safeInspectionId = sanitizeFileName(inspectionId);
+  const safeRowId = sanitizeFileName(rowId);
+  const objectPath = `${safeInspectionId}/${safeRowId}/${Date.now()}-${safeOriginalName}`;
 
-  if (!response.ok) {
-    throw new Error("No se pudo subir una foto a Supabase Storage.");
+  const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(objectPath, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+
+  if (error) {
+    throw new Error(describeSupabaseError(error, "No se pudo subir una foto a Supabase Storage."));
   }
 
   return { photoName: file.name, photoPath: objectPath };
@@ -382,10 +409,7 @@ function formatVisibleNumber(number: number | null | undefined) {
   return typeof number === "number" ? String(number) : "—";
 }
 
-function getDisplayNumber(
-  row: Partial<PersistedChecklistRow>,
-  fallbackNumber?: number
-) {
+function getDisplayNumber(row: Partial<HistoryChecklistRow>, fallbackNumber?: number) {
   if (typeof row.number === "number") return row.number;
   if (typeof fallbackNumber === "number") return fallbackNumber;
   return null;
@@ -615,6 +639,87 @@ function describeSupabaseError(error: unknown, fallbackMessage: string) {
   }
 
   return fallbackMessage;
+}
+
+function normalizeStatus(value: unknown): StatusType {
+  return value === "cumple" || value === "no_cumple" || value === "no_aplica"
+    ? value
+    : "cumple";
+}
+
+function normalizeCriticality(value: unknown): CriticalityType | null {
+  return value === "critico" || value === "mayor" || value === "menor" ? value : null;
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeSummary(value: unknown): Partial<Metrics> | null {
+  if (!value || typeof value !== "object") return null;
+
+  const raw = value as Record<string, unknown>;
+
+  return {
+    totalApplicable: normalizeNumber(raw.totalApplicable) ?? undefined,
+    cumple: normalizeNumber(raw.cumple) ?? undefined,
+    noCumple: normalizeNumber(raw.noCumple) ?? undefined,
+    noAplica: normalizeNumber(raw.noAplica) ?? undefined,
+    score: normalizeNumber(raw.score) ?? undefined,
+  };
+}
+
+function normalizeHistoryChecklistRows(value: unknown): HistoryChecklistRow[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.map((entry) => {
+    const row = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+
+    return {
+      id: normalizeString(row.id) ?? undefined,
+      number: normalizeNumber(row.number) ?? undefined,
+      category: normalizeString(row.category) ?? undefined,
+      item: normalizeString(row.item) ?? undefined,
+      criticality: normalizeCriticality(row.criticality),
+      status: normalizeStatus(row.status),
+      observation: normalizeString(row.observation) ?? undefined,
+      responsible: normalizeString(row.responsible) ?? undefined,
+      photoName: normalizeString(row.photoName) ?? undefined,
+      photoPath: normalizeString(row.photoPath) ?? undefined,
+      findingSeverity: normalizeString(row.findingSeverity) ?? undefined,
+      findingType: normalizeString(row.findingType) ?? undefined,
+      commitmentDate: normalizeString(row.commitmentDate) ?? undefined,
+      findingStatus: normalizeString(row.findingStatus) ?? undefined,
+    };
+  });
+}
+
+function normalizeHistoryRow(value: unknown): InspectionHistoryRow | null {
+  if (!value || typeof value !== "object") return null;
+
+  const row = value as Record<string, unknown>;
+  const id = normalizeString(row.id);
+
+  if (!id) return null;
+
+  return {
+    id,
+    created_at: normalizeString(row.created_at) || new Date(0).toISOString(),
+    company: normalizeString(row.company),
+    plant: normalizeString(row.plant),
+    sector: normalizeString(row.sector),
+    auditor: normalizeString(row.auditor),
+    inspection_date: normalizeString(row.inspection_date),
+    verification_type: row.verification_type === "documental" ? "documental" : "en_campo",
+    email: normalizeString(row.email),
+    summary: normalizeSummary(row.summary),
+    findings: normalizeHistoryChecklistRows(row.findings),
+    checklist: normalizeHistoryChecklistRows(row.checklist),
+  };
 }
 
 const box: React.CSSProperties = {
@@ -848,18 +953,26 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
+    const directUrls: Record<string, string> = {};
     const photoPaths = Array.from(
       new Set(
         historyRows.flatMap((item) =>
-          (item.checklist || [])
+          item.checklist
             .map((row) => row.photoPath)
-            .filter((path): path is string => Boolean(path))
+            .filter((path): path is string => {
+              if (!path) return false;
+              if (/^https?:\/\//i.test(path)) {
+                directUrls[path] = path;
+                return false;
+              }
+              return true;
+            })
         )
       )
     );
 
     if (photoPaths.length === 0) {
-      setHistoryPhotoUrls({});
+      setHistoryPhotoUrls(directUrls);
       return;
     }
 
@@ -872,7 +985,7 @@ export default function App() {
 
       if (error) {
         console.error("No se pudieron resolver las URLs firmadas del historial:", error);
-        setHistoryPhotoUrls({});
+        setHistoryPhotoUrls(directUrls);
         return;
       }
 
@@ -882,7 +995,7 @@ export default function App() {
           .map((item) => [item.path as string, item.signedUrl as string])
       );
 
-      setHistoryPhotoUrls(nextUrls);
+      setHistoryPhotoUrls({ ...directUrls, ...nextUrls });
     };
 
     void resolveHistoryPhotoUrls();
@@ -930,7 +1043,9 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from(SUPABASE_INSPECTIONS_TABLE)
-        .select("*")
+        .select(
+          "id, created_at, company, plant, sector, auditor, inspection_date, verification_type, email, summary, findings, checklist"
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -940,10 +1055,16 @@ export default function App() {
         );
       }
 
-      setHistoryRows(dedupeHistoryRows((data ?? []) as InspectionHistoryRow[]));
+      const normalizedRows = (data ?? [])
+        .map((item) => normalizeHistoryRow(item))
+        .filter((item): item is InspectionHistoryRow => Boolean(item));
+
+      setHistoryRows(dedupeHistoryRows(normalizedRows));
     } catch (error) {
       console.error("Fallo al cargar historial:", error);
-      setHistoryError(error instanceof Error ? error.message : "No se pudo cargar el historial.");
+      setHistoryError(
+        error instanceof Error ? error.message : "No se pudo cargar el historial."
+      );
     } finally {
       setHistoryLoading(false);
     }
@@ -1041,7 +1162,7 @@ export default function App() {
   };
 
   const handlePhotoUpload = (rowId: string, file?: File) => {
-    if (!file) return;
+    if (!file || !(file instanceof File)) return;
     clearSaveFeedback();
     markRowInteracted(rowId);
     setRows((prev) =>
@@ -1135,7 +1256,7 @@ export default function App() {
       const rowsWithUploads: ChecklistRow[] = [];
 
       for (const row of rows) {
-        if (!row.photoFile) {
+        if (!row.photoFile || row.photoPath) {
           rowsWithUploads.push(row);
           continue;
         }
@@ -1150,6 +1271,10 @@ export default function App() {
           });
         } catch (error) {
           console.error("Error subiendo foto:", error);
+          const uploadMessage = `No se pudo subir la foto del item ${formatVisibleNumber(
+            row.number
+          )} / ${row.id}: ${describeSupabaseError(error, "error de Storage")}`;
+          throw new Error(uploadMessage);
           throw new Error(
             `No se pudo subir la foto del ítem ${formatVisibleNumber(row.number)} (${row.id}).`
           );

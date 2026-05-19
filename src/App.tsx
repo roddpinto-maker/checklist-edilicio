@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
 import dulcorLogo from "./assets/logo-dulcor-alimentos.jpg";
 import {
   AlertCircle,
@@ -29,8 +30,20 @@ type Metrics = {
   score: number;
 };
 
+type ChecklistTemplateItem = {
+  id: string;
+  text: string;
+  criticality: CriticalityType | null;
+};
+
+type ChecklistTemplateGroup = {
+  category: string;
+  items: ChecklistTemplateItem[];
+};
+
 type ChecklistRow = {
   id: string;
+  number: number;
   category: string;
   item: string;
   criticality: CriticalityType | null;
@@ -40,6 +53,10 @@ type ChecklistRow = {
   photoName: string;
   photoPath: string;
   photoFile: File | null;
+  findingSeverity?: string | null;
+  findingType?: string | null;
+  commitmentDate?: string | null;
+  findingStatus?: string | null;
 };
 
 type PersistedChecklistRow = Omit<ChecklistRow, "photoFile">;
@@ -54,6 +71,20 @@ type InspectionHistoryRow = {
   inspection_date: string | null;
   verification_type: VerificationType;
   email: string | null;
+  summary: Partial<Metrics> | null;
+  findings: PersistedChecklistRow[] | null;
+  checklist: PersistedChecklistRow[] | null;
+};
+
+type InspectionPayload = {
+  id: string;
+  company: string;
+  plant: string;
+  sector: string;
+  auditor: string;
+  inspection_date: string;
+  verification_type: VerificationType;
+  email: string;
   summary: Metrics;
   findings: PersistedChecklistRow[];
   checklist: PersistedChecklistRow[];
@@ -66,78 +97,30 @@ const SUPABASE_BUCKET = "inspection-photos";
 const SUPABASE_INSPECTIONS_TABLE = "inspections";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-type ChecklistTemplateItem =
-  | string
-  | {
-      id: string;
-      text: string;
-      criticality: CriticalityType;
-    };
+const DOCUMENTAL_CHECKLIST: ChecklistTemplateGroup[] = [
+  {
+    category: "General y zonificación",
+    items: [
+      { id: "DOC-GEN-01", text: "El sector posee cartelería visible, vigente y coherente.", criticality: null },
+      { id: "DOC-GEN-02", text: "El sector cuenta con un plano de flujo de materiales productivos.", criticality: null },
+      { id: "DOC-GEN-03", text: "El sector cuenta con un plano de flujo de producto en proceso.", criticality: null },
+      { id: "DOC-GEN-04", text: "El sector cuenta con un plano de flujo de producto terminado.", criticality: null },
+      { id: "DOC-GEN-05", text: "El sector cuenta con un plano de circulación de residuos.", criticality: null },
+    ],
+  },
+  {
+    category: "Documentación técnica",
+    items: [
+      { id: "DOC-TEC-01", text: "Existe procedimiento de transferencia definido y aplicado.", criticality: null },
+      { id: "DOC-TEC-02", text: "Está disponible y actualizado un plano de la red de desagües.", criticality: null },
+      { id: "DOC-TEC-03", text: "Existe mantenimiento preventivo para la red de agua potable.", criticality: null },
+      { id: "DOC-TEC-04", text: "La red de aire posee filtros y mantenimiento periódico.", criticality: null },
+      { id: "DOC-TEC-05", text: "El sistema de vapor está clasificado según uso.", criticality: null },
+    ],
+  },
+];
 
-const CHECKLISTS: Record<VerificationType, { category: string; items: ChecklistTemplateItem[] }[]> = {
-  documental: [
-    {
-      category: "General y zonificación",
-      items: [
-        "El sector posee cartelería visible, vigente y coherente.",
-        "El sector cuenta con un plano de flujo de materiales productivos.",
-        "El sector cuenta con un plano de flujo de producto en proceso.",
-        "El sector cuenta con un plano de flujo de producto terminado.",
-        "El sector cuenta con un plano de circulación de residuos.",
-      ],
-    },
-    {
-      category: "Documentación técnica",
-      items: [
-        "Existe procedimiento de transferencia definido y aplicado.",
-        "Está disponible y actualizado un plano de la red de desagües.",
-        "Existe mantenimiento preventivo para la red de agua potable.",
-        "La red de aire posee filtros y mantenimiento periódico.",
-        "El sistema de vapor está clasificado según uso.",
-      ],
-    },
-  ],
-  en_campo: [
-    {
-      category: "Flujo de personas y tránsito",
-      items: [
-        "El ingreso a zonas de mayor riesgo se realiza a través de filtros sanitarios.",
-        "No se observan cruces entre áreas de distinto nivel higiénico.",
-        "El tránsito entre sectores está controlado para evitar contaminación cruzada.",
-        "Las zonas de tránsito están definidas y señalizadas.",
-      ],
-    },
-    {
-      category: "Pisos y zócalos",
-      items: [
-        "Los pisos son lisos, impermeables y de fácil limpieza.",
-        "No presentan grietas, fisuras ni deterioros.",
-        "Presentan pendiente adecuada hacia drenajes.",
-        "No se observa acumulación de agua.",
-      ],
-    },
-    {
-      category: "Paredes, techos y condensación",
-      items: [
-        "Las paredes son lisas, continuas e impermeables.",
-        "Las penetraciones están selladas.",
-        "Los techos no presentan desprendimientos ni suciedad acumulada.",
-        "No hay evidencia de condensación.",
-      ],
-    },
-    {
-      category: "Drenajes y cierres",
-      items: [
-        "Los drenajes funcionan correctamente.",
-        "Las rejillas son removibles y limpiables.",
-        "Las puertas presentan buen ajuste.",
-        "Las ventanas están selladas o protegidas cuando corresponde.",
-      ],
-    },
-  ],
-};
-
-const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem, string>[] }[] = [
+const FIELD_CHECKLIST: ChecklistTemplateGroup[] = [
   {
     category: "Flujo de personas y tránsito",
     items: [
@@ -233,8 +216,8 @@ const FIELD_CHECKLIST: { category: string; items: Exclude<ChecklistTemplateItem,
   },
 ];
 
-function getChecklistGroups(type: VerificationType) {
-  return type === "en_campo" ? FIELD_CHECKLIST : CHECKLISTS.documental;
+function getChecklistGroups(type: VerificationType): ChecklistTemplateGroup[] {
+  return type === "en_campo" ? FIELD_CHECKLIST : DOCUMENTAL_CHECKLIST;
 }
 
 const statusUi: Record<
@@ -246,32 +229,30 @@ const statusUi: Record<
   no_aplica: { label: "No aplica", color: "#e2e8f0", Icon: FileText },
 };
 
-function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 function sanitizeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
 function buildRows(type: VerificationType): ChecklistRow[] {
-  return getChecklistGroups(type).flatMap((group, gi) =>
-    group.items.map((item, ii) => ({
-      id: typeof item === "string" ? `${type}-${gi}-${ii}-${slugify(item).slice(0, 18)}` : item.id,
+  let visibleNumber = 1;
+
+  return getChecklistGroups(type).flatMap((group) =>
+    group.items.map((item) => ({
+      id: item.id,
+      number: visibleNumber++,
       category: group.category,
-      item: typeof item === "string" ? item : item.text,
-      criticality: typeof item === "string" ? null : item.criticality,
+      item: item.text,
+      criticality: item.criticality,
       status: "cumple",
       observation: "",
       responsible: "",
       photoName: "",
       photoPath: "",
       photoFile: null,
+      findingSeverity: null,
+      findingType: null,
+      commitmentDate: null,
+      findingStatus: null,
     }))
   );
 }
@@ -284,22 +265,26 @@ function toPersistedRows(rows: ChecklistRow[]): PersistedChecklistRow[] {
   });
 }
 
-function calculateMetrics(rows: ChecklistRow[]): Metrics {
-  const applicable = rows.filter((r) => r.status !== "no_aplica");
+function calculateMetrics(rows: Array<Pick<ChecklistRow, "status">>): Metrics {
+  const applicable = rows.filter((row) => row.status !== "no_aplica");
   const totalApplicable = applicable.length;
-  const cumple = applicable.filter((r) => r.status === "cumple").length;
-  const noCumple = applicable.filter((r) => r.status === "no_cumple").length;
-  const noAplica = rows.filter((r) => r.status === "no_aplica").length;
+  const cumple = applicable.filter((row) => row.status === "cumple").length;
+  const noCumple = applicable.filter((row) => row.status === "no_cumple").length;
+  const noAplica = rows.filter((row) => row.status === "no_aplica").length;
   const score = totalApplicable ? Math.round((cumple / totalApplicable) * 100) : 0;
+
   return { totalApplicable, cumple, noCumple, noAplica, score };
 }
 
-function calculateCriticalMetrics(rows: Array<Pick<ChecklistRow, "criticality" | "status">>) {
+function calculateCriticalMetrics(
+  rows: Array<Pick<ChecklistRow, "criticality" | "status">>
+) {
   const applicable = rows.filter(
     (row) => row.criticality === "critico" && row.status !== "no_aplica"
   );
   const totalApplicable = applicable.length;
   const cumple = applicable.filter((row) => row.status === "cumple").length;
+
   return {
     totalApplicable,
     cumple,
@@ -347,20 +332,25 @@ function getPhotoPreviewUrl(row: ChecklistRow): string {
   return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${row.photoPath}`;
 }
 
-function formatCriticalityLabel(criticality: CriticalityType | null) {
-  if (!criticality) return "";
+function formatCriticalityLabel(criticality: CriticalityType) {
   if (criticality === "critico") return "Crítico";
   if (criticality === "menor") return "Menor";
   return "Mayor";
 }
 
-function getCriticalityChipClassName(criticality: CriticalityType | null) {
+function formatCriticalityFallback(criticality: CriticalityType | null | undefined) {
+  return criticality ? formatCriticalityLabel(criticality) : "Sin criticidad";
+}
+
+function getCriticalityChipClassName(criticality: CriticalityType | null | undefined) {
   if (criticality === "critico") return "row-chip row-chip--critical";
   if (criticality === "menor") return "row-chip row-chip--minor";
   return "row-chip row-chip--secondary";
 }
 
-function getCriticalityBadgeStyle(criticality: CriticalityType | null): React.CSSProperties {
+function getCriticalityBadgeStyle(
+  criticality: CriticalityType | null | undefined
+): React.CSSProperties {
   if (criticality === "critico") {
     return {
       background: "#fee2e2",
@@ -384,18 +374,247 @@ function getCriticalityBadgeStyle(criticality: CriticalityType | null): React.CS
   };
 }
 
-function saveJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json;charset=utf-8",
+function formatVerificationTypeLabel(type: VerificationType) {
+  return type === "documental" ? "Documental" : "En campo";
+}
+
+function formatVisibleNumber(number: number | null | undefined) {
+  return typeof number === "number" ? String(number) : "—";
+}
+
+function getDisplayNumber(
+  row: Partial<PersistedChecklistRow>,
+  fallbackNumber?: number
+) {
+  if (typeof row.number === "number") return row.number;
+  if (typeof fallbackNumber === "number") return fallbackNumber;
+  return null;
+}
+
+function getDisplayCode(row: Partial<PersistedChecklistRow>) {
+  return row.id?.trim() ? row.id : "Sin código estable";
+}
+
+function getPhotoReference(row: Partial<PersistedChecklistRow>) {
+  return row.photoPath?.trim() || row.photoName?.trim() || "";
+}
+
+function formatDateTime(value: Date) {
+  return value.toLocaleString("es-AR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+}
+
+function buildExportFileName(payload: InspectionPayload) {
+  return `revision-edilicia-${sanitizeFileName(payload.plant || "planta")}-${
+    payload.inspection_date || "sin-fecha"
+  }.xlsx`;
+}
+
+function buildInspectionSnapshot(input: {
+  company: string;
+  plant: string;
+  sector: string;
+  auditor: string;
+  inspectionDate: string;
+  verificationType: VerificationType;
+  email: string;
+  rows: ChecklistRow[];
+}) {
+  return JSON.stringify({
+    company: input.company.trim(),
+    plant: input.plant.trim(),
+    sector: input.sector.trim(),
+    auditor: input.auditor.trim(),
+    inspectionDate: input.inspectionDate,
+    verificationType: input.verificationType,
+    email: input.email.trim().toLowerCase(),
+    rows: input.rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      category: row.category,
+      item: row.item,
+      criticality: row.criticality,
+      status: row.status,
+      observation: row.observation.trim(),
+      responsible: row.responsible.trim(),
+      photoRef: row.photoPath || row.photoName || "",
+      findingSeverity: row.findingSeverity || "",
+      findingType: row.findingType || "",
+      commitmentDate: row.commitmentDate || "",
+      findingStatus: row.findingStatus || "",
+    })),
+  });
+}
+
+function buildValidationErrors(input: {
+  company: string;
+  plant: string;
+  sector: string;
+  auditor: string;
+  inspectionDate: string;
+  recipientEmail: string;
+  confirmRecipientEmail: string;
+  rows: ChecklistRow[];
+}) {
+  const errors: string[] = [];
+
+  if (!input.company.trim()) errors.push("Completa Empresa.");
+  if (!input.plant.trim()) errors.push("Completa Planta.");
+  if (!input.sector.trim()) errors.push("Completa Sector.");
+  if (!input.auditor.trim()) errors.push("Completa Auditor.");
+  if (!input.inspectionDate) errors.push("Completa Fecha de inspección.");
+  if (!input.recipientEmail.trim()) {
+    errors.push("Completa Mail destinatario.");
+  } else if (!isValidEmail(input.recipientEmail)) {
+    errors.push("El mail destinatario no es válido.");
+  }
+  if (input.recipientEmail !== input.confirmRecipientEmail) {
+    errors.push("La confirmación del mail no coincide.");
+  }
+
+  input.rows.forEach((row) => {
+    if (row.status !== "no_cumple") return;
+
+    const itemLabel = `${formatVisibleNumber(row.number)} (${row.id})`;
+
+    if (!row.observation.trim()) {
+      errors.push(`Ítem ${itemLabel}: falta observación.`);
+    }
+    if (!row.responsible.trim()) {
+      errors.push(`Ítem ${itemLabel}: falta responsable.`);
+    }
+    if (row.criticality === "critico" && !row.photoFile && !row.photoPath && !row.photoName) {
+      errors.push(`Ítem ${itemLabel}: al ser crítico en "No cumple" requiere foto.`);
+    }
+  });
+
+  return errors;
+}
+
+function exportInspectionToExcel(payload: InspectionPayload) {
+  const workbook = XLSX.utils.book_new();
+  const criticalMetrics = calculateCriticalMetrics(payload.checklist);
+  const exportedAt = new Date();
+
+  const resumenRows = [
+    ["Campo", "Valor"],
+    ["Empresa", payload.company || ""],
+    ["Planta", payload.plant || ""],
+    ["Sector", payload.sector || ""],
+    ["Auditor", payload.auditor || ""],
+    ["Fecha inspección", payload.inspection_date || ""],
+    ["Tipo de verificación", formatVerificationTypeLabel(payload.verification_type)],
+    ["Cumplimiento general", `${payload.summary.score}%`],
+    [
+      "Cumplimiento críticos",
+      criticalMetrics.score === null ? "N/A" : `${criticalMetrics.score}%`,
+    ],
+    ["Total cumple", payload.summary.cumple],
+    ["Total no cumple", payload.summary.noCumple],
+    ["Total no aplica", payload.summary.noAplica],
+    ["Cantidad de hallazgos", payload.findings.length],
+    ["Fecha de exportación", formatDateTime(exportedAt)],
+  ];
+
+  const hallazgosRows = payload.findings.map((row) => ({
+    "ID del ítem": row.id,
+    "Número visible": row.number,
+    Categoría: row.category,
+    Pregunta: row.item,
+    Resultado: statusUi[row.status].label,
+    "Criticidad del ítem": formatCriticalityFallback(row.criticality),
+    "Severidad del hallazgo, si existe": row.findingSeverity || "",
+    "Tipo de hallazgo, si existe": row.findingType || "",
+    Observación: row.observation || "",
+    Responsable: row.responsible || "",
+    "Fecha compromiso, si existe": row.commitmentDate || "",
+    "Estado, si existe": row.findingStatus || "",
+    "Foto / nombre de foto / URL si existe": getPhotoReference(row),
+  }));
+
+  const checklistRows = payload.checklist.map((row) => ({
+    "ID del ítem": row.id,
+    "Número visible": row.number,
+    Categoría: row.category,
+    Pregunta: row.item,
+    Resultado: statusUi[row.status].label,
+    Criticidad: formatCriticalityFallback(row.criticality),
+    Observación: row.observation || "",
+    Responsable: row.responsible || "",
+    Foto: getPhotoReference(row),
+  }));
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet(resumenRows),
+    "Resumen"
+  );
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(hallazgosRows),
+    "Hallazgos"
+  );
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(checklistRows),
+    "Checklist completo"
+  );
+
+  XLSX.writeFile(workbook, buildExportFileName(payload));
+}
+
+function dedupeHistoryRows(rows: InspectionHistoryRow[]) {
+  const seen = new Set<string>();
+
+  return rows.filter((row) => {
+    if (!row.id) return true;
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
+function resolveSaveError(error: unknown) {
+  if (error instanceof TypeError) {
+    return "Error de red. Revisá la conexión e intentá guardar nuevamente.";
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return "No se pudo guardar la inspección.";
+}
+
+function describeSupabaseError(error: unknown, fallbackMessage: string) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    const details =
+      "details" in error && typeof error.details === "string" && error.details
+        ? ` ${error.details}`
+        : "";
+    const hint =
+      "hint" in error && typeof error.hint === "string" && error.hint
+        ? ` ${error.hint}`
+        : "";
+    return `${error.message}${details}${hint}`.trim();
+  }
+
+  return fallbackMessage;
 }
 
 const box: React.CSSProperties = {
@@ -511,7 +730,9 @@ export default function App() {
   const [confirmRecipientEmail, setConfirmRecipientEmail] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveMode, setSaveMode] = useState<"save" | "save_export" | null>(null);
   const [rows, setRows] = useState<ChecklistRow[]>(() => buildRows("en_campo"));
   const [interactedRowIds, setInteractedRowIds] = useState<string[]>([]);
   const [historyRows, setHistoryRows] = useState<InspectionHistoryRow[]>([]);
@@ -526,27 +747,47 @@ export default function App() {
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
   const [historyPhotoUrls, setHistoryPhotoUrls] = useState<Record<string, string>>({});
 
+  const saveLockRef = useRef(false);
+  const didLoadHistoryRef = useRef(false);
+  const lastSavedRef = useRef<{ snapshotKey: string; payload: InspectionPayload } | null>(null);
+
   const metrics = useMemo(() => calculateMetrics(rows), [rows]);
   const criticalMetrics = useMemo(() => calculateCriticalMetrics(rows), [rows]);
-  const findings = useMemo(() => rows.filter((r) => r.status === "no_cumple"), [rows]);
+  const findings = useMemo(() => rows.filter((row) => row.status === "no_cumple"), [rows]);
   const interactedRowSet = useMemo(() => new Set(interactedRowIds), [interactedRowIds]);
 
   const emailValid = recipientEmail.length > 0 && isValidEmail(recipientEmail);
   const emailMatch = recipientEmail.length > 0 && recipientEmail === confirmRecipientEmail;
   const canFinalize = Boolean(
-    company && plant && sector && auditor && inspectionDate && emailValid && emailMatch
+    company.trim() &&
+      plant.trim() &&
+      sector.trim() &&
+      auditor.trim() &&
+      inspectionDate &&
+      emailValid &&
+      emailMatch
   );
+
+  const clearSaveFeedback = () => {
+    setSaveMessage("");
+    setSaveError("");
+    setValidationErrors([]);
+  };
 
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return rows;
-    return rows.filter(
-      (row) =>
+
+    return rows.filter((row) => {
+      return (
         row.category.toLowerCase().includes(q) ||
         row.item.toLowerCase().includes(q) ||
+        row.id.toLowerCase().includes(q) ||
+        String(row.number).includes(q) ||
         row.observation.toLowerCase().includes(q) ||
         row.responsible.toLowerCase().includes(q)
-    );
+      );
+    });
   }, [rows, search]);
 
   const byCategory = useMemo(() => {
@@ -557,6 +798,7 @@ export default function App() {
       const cumple = groupRows.filter((row) => row.status === "cumple").length;
       const total = groupRows.length;
       const pendientes = groupRows.filter((row) => row.status === "no_cumple").length;
+
       return {
         category: group.category,
         total,
@@ -672,6 +914,7 @@ export default function App() {
       criticalMetrics.score === null
         ? "Cumplimiento críticos: N/A."
         : `Cumplimiento críticos: ${criticalMetrics.score}%.`;
+
     return `Inspección de ${typeLabel} en ${plant || "planta"}, sector ${
       sector || "sin sector"
     }. Cumplimiento general ${metrics.score}%. Hallazgos no conformes: ${
@@ -683,6 +926,7 @@ export default function App() {
     setHistoryLoading(true);
     setHistoryError("");
     setHistoryMessage("");
+
     try {
       const { data, error } = await supabase
         .from(SUPABASE_INSPECTIONS_TABLE)
@@ -691,9 +935,12 @@ export default function App() {
 
       if (error) {
         console.error("Error cargando historial desde Supabase:", error);
-        throw new Error("No se pudo cargar el historial de inspecciones.");
+        throw new Error(
+          describeSupabaseError(error, "No se pudo cargar el historial de inspecciones.")
+        );
       }
-      setHistoryRows((data ?? []) as InspectionHistoryRow[]);
+
+      setHistoryRows(dedupeHistoryRows((data ?? []) as InspectionHistoryRow[]));
     } catch (error) {
       console.error("Fallo al cargar historial:", error);
       setHistoryError(error instanceof Error ? error.message : "No se pudo cargar el historial.");
@@ -703,6 +950,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (didLoadHistoryRef.current) return;
+    didLoadHistoryRef.current = true;
     void loadHistory();
   }, []);
 
@@ -733,14 +982,12 @@ export default function App() {
 
       if (deleteError) {
         console.error("Error eliminando inspección en Supabase:", deleteError);
-        throw new Error("No se pudo borrar la inspección seleccionada.");
+        throw new Error(
+          describeSupabaseError(deleteError, "No se pudo borrar la inspección seleccionada.")
+        );
       }
 
       if (!deletedRows || deletedRows.length === 0) {
-        console.error(
-          "Delete sin filas afectadas. Posible RLS o id inexistente.",
-          { table: SUPABASE_INSPECTIONS_TABLE, id: item.id }
-        );
         throw new Error(
           "No se pudo borrar la inspección en Supabase. Revisá permisos RLS o el id del registro."
         );
@@ -754,24 +1001,6 @@ export default function App() {
         if (storageError) {
           console.error("La inspección se borró, pero falló la limpieza de Storage:", storageError);
         }
-      }
-
-      const { data: remainingRows, error: verifyError } = await supabase
-        .from(SUPABASE_INSPECTIONS_TABLE)
-        .select("id")
-        .eq("id", item.id);
-
-      if (verifyError) {
-        console.error("Error verificando delete en Supabase:", verifyError);
-        throw new Error("Se borró la inspección, pero falló la verificación contra Supabase.");
-      }
-
-      if (remainingRows && remainingRows.length > 0) {
-        console.error("El registro sigue existiendo después del delete:", {
-          table: SUPABASE_INSPECTIONS_TABLE,
-          id: item.id,
-        });
-        throw new Error("La inspección sigue existiendo en la base después del intento de borrado.");
       }
 
       await loadHistory();
@@ -791,22 +1020,29 @@ export default function App() {
     setInteractedRowIds((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
   };
 
-  const updateRow = (rowId: string, field: keyof ChecklistRow, value: string) => {
+  const updateRow = <K extends keyof ChecklistRow>(rowId: string, field: K, value: ChecklistRow[K]) => {
     setRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
   };
 
-  const handleRowFieldChange = (rowId: string, field: keyof ChecklistRow, value: string) => {
+  const handleRowFieldChange = <K extends keyof ChecklistRow>(
+    rowId: string,
+    field: K,
+    value: ChecklistRow[K]
+  ) => {
+    clearSaveFeedback();
     markRowInteracted(rowId);
     updateRow(rowId, field, value);
   };
 
   const handleStatusChange = (rowId: string, status: StatusType) => {
+    clearSaveFeedback();
     markRowInteracted(rowId);
     updateRow(rowId, "status", status);
   };
 
   const handlePhotoUpload = (rowId: string, file?: File) => {
     if (!file) return;
+    clearSaveFeedback();
     markRowInteracted(rowId);
     setRows((prev) =>
       prev.map((row) =>
@@ -816,7 +1052,7 @@ export default function App() {
   };
 
   const handlePhotoRemove = (rowId: string) => {
-    setInteractedRowIds((prev) => prev.filter((id) => id !== rowId));
+    clearSaveFeedback();
     setRows((prev) =>
       prev.map((row) =>
         row.id === rowId
@@ -827,139 +1063,167 @@ export default function App() {
   };
 
   const resetChecklist = () => {
+    clearSaveFeedback();
+    lastSavedRef.current = null;
     setRows(buildRows(verificationType));
     setInteractedRowIds([]);
     setSearch("");
-    setSaveMessage("");
-    setSaveError("");
   };
 
   const changeType = (value: VerificationType) => {
+    clearSaveFeedback();
+    lastSavedRef.current = null;
     setVerificationType(value);
     setRows(buildRows(value));
     setInteractedRowIds([]);
     setSearch("");
-    setSaveMessage("");
-    setSaveError("");
   };
 
-  const exportJson = () => {
-    try {
-      const data = {
-        id: `INSP-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        encabezado: {
-          company,
-          plant,
-          sector,
-          auditor,
-          inspectionDate,
-          verificationType,
-          email: recipientEmail,
-        },
-        resumen: metrics,
-        hallazgos: toPersistedRows(rows).filter((row) => row.status === "no_cumple"),
-        checklist: toPersistedRows(rows),
-      };
-      saveJson(
-        `revision-edilicia-${plant || "planta"}-${inspectionDate || "sin-fecha"}.json`,
-        data
-      );
-      setSaveMessage("Archivo JSON exportado correctamente.");
-      setSaveError("");
-    } catch {
-      setSaveError("No se pudo exportar el archivo JSON.");
-      setSaveMessage("");
-    }
-  };
+  const executeSave = async (exportAfterSave: boolean) => {
+    if (saveLockRef.current) return;
 
-  const saveOnline = async () => {
-    setSaveMessage("");
-    setSaveError("");
+    clearSaveFeedback();
 
-    if (!canFinalize) {
-      setSaveError(
-        "Completá empresa, planta, sector, auditor, fecha y un mail válido con confirmación correcta."
-      );
+    const errors = buildValidationErrors({
+      company,
+      plant,
+      sector,
+      auditor,
+      inspectionDate,
+      recipientEmail,
+      confirmRecipientEmail,
+      rows,
+    });
+
+    if (errors.length > 0) {
+      setSaveError("No se puede guardar hasta corregir los faltantes.");
+      setValidationErrors(errors);
       return;
     }
 
+    const snapshotKey = buildInspectionSnapshot({
+      company,
+      plant,
+      sector,
+      auditor,
+      inspectionDate,
+      verificationType,
+      email: recipientEmail,
+      rows,
+    });
+
+    if (lastSavedRef.current?.snapshotKey === snapshotKey) {
+      if (exportAfterSave) {
+        try {
+          exportInspectionToExcel(lastSavedRef.current.payload);
+          setSaveMessage("Inspección guardada correctamente y exportada a Excel.");
+        } catch {
+          setSaveError("La inspección ya estaba guardada, pero no se pudo generar el Excel.");
+        }
+      } else {
+        setSaveMessage("Inspección guardada correctamente.");
+      }
+      return;
+    }
+
+    saveLockRef.current = true;
     setIsSaving(true);
+    setSaveMode(exportAfterSave ? "save_export" : "save");
 
     try {
       const inspectionId = crypto.randomUUID();
+      const rowsWithUploads: ChecklistRow[] = [];
 
-      const rowsWithUploads = await Promise.all(
-        rows.map(async (row) => {
-          if (!row.photoFile) return row;
+      for (const row of rows) {
+        if (!row.photoFile) {
+          rowsWithUploads.push(row);
+          continue;
+        }
+
+        try {
           const uploaded = await uploadPhotoToSupabase(row.photoFile, inspectionId, row.id);
-          return {
+          rowsWithUploads.push({
             ...row,
             photoName: uploaded.photoName,
             photoPath: uploaded.photoPath,
             photoFile: null,
-          };
-        })
-      );
+          });
+        } catch (error) {
+          console.error("Error subiendo foto:", error);
+          throw new Error(
+            `No se pudo subir la foto del ítem ${formatVisibleNumber(row.number)} (${row.id}).`
+          );
+        }
+      }
 
-      const savedMetrics = calculateMetrics(rowsWithUploads);
-      const persisted = toPersistedRows(rowsWithUploads);
+      const summary = calculateMetrics(rowsWithUploads);
+      const persistedRows = toPersistedRows(rowsWithUploads);
+      const payload: InspectionPayload = {
+        id: inspectionId,
+        company: company.trim(),
+        plant: plant.trim(),
+        sector: sector.trim(),
+        auditor: auditor.trim(),
+        inspection_date: inspectionDate,
+        verification_type: verificationType,
+        email: recipientEmail.trim(),
+        summary,
+        findings: persistedRows.filter((row) => row.status === "no_cumple"),
+        checklist: persistedRows,
+      };
 
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/inspections`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({
-          id: inspectionId,
-          company,
-          plant,
-          sector,
-          auditor,
-          inspection_date: inspectionDate,
-          verification_type: verificationType,
-          email: recipientEmail,
-          summary: savedMetrics,
-          findings: persisted.filter((row) => row.status === "no_cumple"),
-          checklist: persisted,
-        }),
-      });
+      const { error: upsertError } = await supabase
+        .from(SUPABASE_INSPECTIONS_TABLE)
+        .upsert(payload, { onConflict: "id" });
 
-      if (!res.ok) throw new Error("No se pudo guardar la inspección en Supabase.");
+      if (upsertError) {
+        console.error("Error guardando inspección en Supabase:", upsertError);
+        throw new Error(
+          describeSupabaseError(upsertError, "No se pudo guardar la inspección en Supabase.")
+        );
+      }
 
       setRows(rowsWithUploads);
+      lastSavedRef.current = { snapshotKey, payload };
       await loadHistory();
-      setSaveMessage("Inspección guardada correctamente en Supabase.");
-      setSaveError("");
+
+      if (exportAfterSave) {
+        try {
+          exportInspectionToExcel(payload);
+          setSaveMessage("Inspección guardada correctamente y exportada a Excel.");
+        } catch (error) {
+          console.error("Error exportando Excel:", error);
+          setSaveMessage("Inspección guardada correctamente.");
+          setSaveError("La inspección se guardó, pero no se pudo generar el archivo Excel.");
+        }
+      } else {
+        setSaveMessage("Inspección guardada correctamente.");
+      }
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "No se pudo guardar la inspección.");
-      setSaveMessage("");
+      console.error("Fallo al guardar inspección:", error);
+      setSaveError(resolveSaveError(error));
     } finally {
+      saveLockRef.current = false;
       setIsSaving(false);
+      setSaveMode(null);
     }
   };
 
-  const saveAndExport = async () => {
-    await saveOnline();
-    exportJson();
-  };
-
   const openMailDraft = () => {
-    setSaveMessage("");
-    setSaveError("");
+    clearSaveFeedback();
+
     if (!canFinalize) {
       setSaveError("Completá los datos y verificá el mail antes de enviar resultados.");
       return;
     }
+
     const subject = encodeURIComponent(
       `Resultado inspección edilicia - ${plant} - ${inspectionDate}`
     );
     const body = encodeURIComponent(
       `${executiveSummary}\n\nAuditor: ${auditor}\nEmpresa: ${company}\nSector: ${sector}\n\nHallazgos no conformes: ${metrics.noCumple}\nCumplimiento general: ${metrics.score}%`
     );
+
     window.location.href = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
   };
 
@@ -980,17 +1244,26 @@ export default function App() {
           </div>
           <div className="corporate-header__meta">
             <div className="corporate-header__meta-item">R-CO-PY-002</div>
-            <div className="corporate-header__meta-item">{"Versi\u00F3n N\u00B0 1.0"}</div>
+            <div className="corporate-header__meta-item">Versión N° 1.0</div>
             <div className="corporate-header__meta-item">FV 23/04/2026</div>
           </div>
         </div>
 
         <div className="app-header app-header--actions-only">
           <div className="app-header__actions">
-            <button className="ui-button ui-button--header" style={buttonStyle} onClick={resetChecklist}>
+            <button
+              className="ui-button ui-button--header"
+              style={buttonStyle}
+              onClick={resetChecklist}
+              disabled={isSaving}
+            >
               <RotateCcw size={16} /> Reiniciar
             </button>
-            <button className="ui-button ui-button--header" style={buttonStyle} onClick={() => window.print()}>
+            <button
+              className="ui-button ui-button--header"
+              style={buttonStyle}
+              onClick={() => window.print()}
+            >
               <FileText size={16} /> Imprimir / PDF
             </button>
           </div>
@@ -1005,7 +1278,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={company}
-                onChange={(e) => setCompany(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setCompany(e.target.value);
+                }}
               />
             </div>
             <div style={reviewFieldStyle}>
@@ -1014,7 +1290,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={plant}
-                onChange={(e) => setPlant(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setPlant(e.target.value);
+                }}
               />
             </div>
             <div style={reviewFieldStyle}>
@@ -1023,7 +1302,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={sector}
-                onChange={(e) => setSector(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setSector(e.target.value);
+                }}
               />
             </div>
             <div style={reviewFieldStyle}>
@@ -1032,7 +1314,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={auditor}
-                onChange={(e) => setAuditor(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setAuditor(e.target.value);
+                }}
               />
             </div>
             <div style={reviewFieldStyle}>
@@ -1042,7 +1327,10 @@ export default function App() {
                 type="date"
                 style={reviewControlStyle}
                 value={inspectionDate}
-                onChange={(e) => setInspectionDate(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setInspectionDate(e.target.value);
+                }}
               />
             </div>
             <div style={reviewFieldStyle}>
@@ -1052,6 +1340,7 @@ export default function App() {
                 style={reviewControlStyle}
                 value={verificationType}
                 onChange={(e) => changeType(e.target.value as VerificationType)}
+                disabled={isSaving}
               >
                 <option value="documental">Documental</option>
                 <option value="en_campo">En campo</option>
@@ -1063,7 +1352,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setRecipientEmail(e.target.value);
+                }}
               />
               {recipientEmail.length > 0 && !emailValid && (
                 <div style={{ ...reviewFeedbackStyle, color: "#dc2626" }}>
@@ -1078,7 +1370,10 @@ export default function App() {
                 className="review-control"
                 style={reviewControlStyle}
                 value={confirmRecipientEmail}
-                onChange={(e) => setConfirmRecipientEmail(e.target.value)}
+                onChange={(e) => {
+                  clearSaveFeedback();
+                  setConfirmRecipientEmail(e.target.value);
+                }}
               />
               {confirmRecipientEmail.length > 0 && (
                 <div
@@ -1087,7 +1382,11 @@ export default function App() {
                     color: emailMatch ? "#16a34a" : "#dc2626",
                   }}
                 >
-                  {emailMatch ? <Check size={13} style={{ verticalAlign: "middle", marginRight: 4 }} /> : <AlertCircle size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />}
+                  {emailMatch ? (
+                    <Check size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                  ) : (
+                    <AlertCircle size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                  )}
                   {emailMatch ? "El mail coincide" : "El mail no coincide"}
                 </div>
               )}
@@ -1122,34 +1421,34 @@ export default function App() {
         <div className="section-card tabs-card" style={box}>
           <div className="tabs-scroll">
             <div className="tabs-list">
-            <button
-              className={`tab-button ${activeTab === "checklist" ? "tab-button--active" : ""}`}
-              style={activeTab === "checklist" ? primaryButtonStyle : buttonStyle}
-              onClick={() => setActiveTab("checklist")}
-            >
-              Checklist
-            </button>
-            <button
-              className={`tab-button ${activeTab === "resumen" ? "tab-button--active" : ""}`}
-              style={activeTab === "resumen" ? primaryButtonStyle : buttonStyle}
-              onClick={() => setActiveTab("resumen")}
-            >
-              Resumen
-            </button>
-            <button
-              className={`tab-button ${activeTab === "hallazgos" ? "tab-button--active" : ""}`}
-              style={activeTab === "hallazgos" ? primaryButtonStyle : buttonStyle}
-              onClick={() => setActiveTab("hallazgos")}
-            >
-              Hallazgos
-            </button>
-            <button
-              className={`tab-button ${activeTab === "historial" ? "tab-button--active" : ""}`}
-              style={activeTab === "historial" ? primaryButtonStyle : buttonStyle}
-              onClick={() => setActiveTab("historial")}
-            >
-              Historial
-            </button>
+              <button
+                className={`tab-button ${activeTab === "checklist" ? "tab-button--active" : ""}`}
+                style={activeTab === "checklist" ? primaryButtonStyle : buttonStyle}
+                onClick={() => setActiveTab("checklist")}
+              >
+                Checklist
+              </button>
+              <button
+                className={`tab-button ${activeTab === "resumen" ? "tab-button--active" : ""}`}
+                style={activeTab === "resumen" ? primaryButtonStyle : buttonStyle}
+                onClick={() => setActiveTab("resumen")}
+              >
+                Resumen
+              </button>
+              <button
+                className={`tab-button ${activeTab === "hallazgos" ? "tab-button--active" : ""}`}
+                style={activeTab === "hallazgos" ? primaryButtonStyle : buttonStyle}
+                onClick={() => setActiveTab("hallazgos")}
+              >
+                Hallazgos
+              </button>
+              <button
+                className={`tab-button ${activeTab === "historial" ? "tab-button--active" : ""}`}
+                style={activeTab === "historial" ? primaryButtonStyle : buttonStyle}
+                onClick={() => setActiveTab("historial")}
+              >
+                Historial
+              </button>
             </div>
           </div>
         </div>
@@ -1165,23 +1464,25 @@ export default function App() {
                   </strong>
                 </div>
                 <div className="checklist-progress__track" aria-hidden="true">
-                  <div className="checklist-progress__fill" style={{ width: `${checklistProgress}%` }} />
+                  <div
+                    className="checklist-progress__fill"
+                    style={{ width: `${checklistProgress}%` }}
+                  />
                 </div>
               </div>
               <div className="checklist-toolbar__controls">
                 <input
-                className="checklist-search"
-                style={{ ...inputStyle, maxWidth: "none" }}
-                placeholder="Buscar por categoría, punto, observación o responsable"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <div className="checklist-toolbar__summary">
-                Mostrando checklist de:{" "}
-                <strong>{verificationType === "documental" ? "Revisión documental" : "Verificación en campo"}</strong>
+                  className="checklist-search"
+                  style={{ ...inputStyle, maxWidth: "none" }}
+                  placeholder="Buscar por categoría, punto, código, observación o responsable"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <div className="checklist-toolbar__summary">
+                  Mostrando checklist de:{" "}
+                  <strong>{formatVerificationTypeLabel(verificationType)}</strong>
+                </div>
               </div>
-            </div>
-
             </div>
 
             <div style={{ display: "grid", gap: 14 }}>
@@ -1192,11 +1493,19 @@ export default function App() {
                 const rowCompleted =
                   interactedRowSet.has(row.id) ||
                   row.status !== "cumple" ||
-                  Boolean(row.responsible.trim() || row.observation.trim() || row.photoName || row.photoPath);
+                  Boolean(
+                    row.responsible.trim() ||
+                      row.observation.trim() ||
+                      row.photoName ||
+                      row.photoPath
+                  );
+
                 return (
                   <div
                     key={row.id}
-                    className={`checklist-item-card ${rowCompleted ? "checklist-item-card--completed" : ""}`}
+                    className={`checklist-item-card ${
+                      rowCompleted ? "checklist-item-card--completed" : ""
+                    }`}
                     style={{
                       border: "1px solid #e2e8f0",
                       borderRadius: 14,
@@ -1226,38 +1535,28 @@ export default function App() {
                           >
                             {row.category}
                           </div>
-                          {row.criticality && (
-                            <>
-                              <div
-                                style={{
-                                  display: "inline-block",
-                                  fontSize: 12,
-                                  padding: "4px 8px",
-                                  background: "#fff",
-                                  border: "1px solid #cbd5e1",
-                                  borderRadius: 999,
-                                  color: "#475569",
-                                  fontFamily: "ui-monospace, Consolas, monospace",
-                                }}
-                              >
-                                {row.id}
-                              </div>
-                              <div
-                                style={{
-                                  display: "inline-block",
-                                  fontSize: 12,
-                                  padding: "4px 8px",
-                                  borderRadius: 999,
-                                  fontWeight: 700,
-                                  ...getCriticalityBadgeStyle(row.criticality),
-                                }}
-                              >
-                                {formatCriticalityLabel(row.criticality)}
-                              </div>
-                            </>
+                          <div className="row-chip">N° {row.number}</div>
+                          <div className="row-chip row-chip--code">{row.id}</div>
+                          {row.criticality ? (
+                            <div
+                              style={{
+                                display: "inline-block",
+                                fontSize: 12,
+                                padding: "4px 8px",
+                                borderRadius: 999,
+                                fontWeight: 700,
+                                ...getCriticalityBadgeStyle(row.criticality),
+                              }}
+                            >
+                              {formatCriticalityLabel(row.criticality)}
+                            </div>
+                          ) : (
+                            <div className="row-chip row-chip--secondary">Sin criticidad</div>
                           )}
                         </div>
-                        <div style={{ fontWeight: 700, fontSize: 18 }}>{row.item}</div>
+                        <div style={{ fontWeight: 700, fontSize: 18 }}>
+                          {row.number}. {row.item}
+                        </div>
                       </div>
                       <div
                         style={{
@@ -1308,7 +1607,9 @@ export default function App() {
                         <input
                           style={inputStyle}
                           value={row.responsible}
-                          onChange={(e) => handleRowFieldChange(row.id, "responsible", e.target.value)}
+                          onChange={(e) =>
+                            handleRowFieldChange(row.id, "responsible", e.target.value)
+                          }
                         />
                       </div>
 
@@ -1319,7 +1620,7 @@ export default function App() {
                             <img
                               className="photo-panel__preview"
                               src={photoPreviewUrl}
-                              alt={`Foto del item ${row.item}`}
+                              alt={`Foto del ítem ${row.item}`}
                             />
                           ) : null}
                           <div className="photo-panel__content">
@@ -1360,7 +1661,9 @@ export default function App() {
                         <textarea
                           style={{ ...inputStyle, minHeight: 90 }}
                           value={row.observation}
-                          onChange={(e) => handleRowFieldChange(row.id, "observation", e.target.value)}
+                          onChange={(e) =>
+                            handleRowFieldChange(row.id, "observation", e.target.value)
+                          }
                         />
                       </div>
                     </div>
@@ -1452,14 +1755,15 @@ export default function App() {
                   >
                     <div className="row-meta">
                       <span className="row-chip">{item.category}</span>
+                      <span className="row-chip">N° {formatVisibleNumber(item.number)}</span>
                       <span className="row-chip row-chip--code">{item.id}</span>
-                      {item.criticality && (
-                        <span className={getCriticalityChipClassName(item.criticality)}>
-                          {formatCriticalityLabel(item.criticality)}
-                        </span>
-                      )}
+                      <span className={getCriticalityChipClassName(item.criticality)}>
+                        {formatCriticalityFallback(item.criticality)}
+                      </span>
                     </div>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>{item.item}</div>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                      {item.number}. {item.item}
+                    </div>
                     <div
                       style={{
                         display: "grid",
@@ -1469,7 +1773,7 @@ export default function App() {
                     >
                       <div><strong>Observación:</strong> {item.observation || "-"}</div>
                       <div><strong>Responsable:</strong> {item.responsible || "-"}</div>
-                      <div><strong>Foto:</strong> {item.photoName || "-"}</div>
+                      <div><strong>Foto:</strong> {item.photoName || item.photoPath || "-"}</div>
                     </div>
                   </div>
                 ))}
@@ -1490,7 +1794,7 @@ export default function App() {
               }}
             >
               <h2 style={{ margin: 0 }}>Historial de inspecciones</h2>
-              <button className="ui-button" style={buttonStyle} onClick={loadHistory}>
+              <button className="ui-button" style={buttonStyle} onClick={() => void loadHistory()}>
                 <RotateCcw size={16} /> Actualizar historial
               </button>
             </div>
@@ -1571,10 +1875,17 @@ export default function App() {
                     className="history-record"
                     style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
                       <div>
                         <div style={{ fontSize: 12, color: "#64748b" }}>
-                          {item.verification_type === "documental" ? "Documental" : "En campo"}
+                          {formatVerificationTypeLabel(item.verification_type)}
                         </div>
                         <div style={{ fontWeight: 700, fontSize: 18 }}>
                           {item.company || "Sin empresa"} · {item.plant || "Sin planta"}
@@ -1603,11 +1914,15 @@ export default function App() {
                       </div>
                       <div style={{ background: "#ecfdf5", borderRadius: 10, padding: 10 }}>
                         <div style={{ fontSize: 12, color: "#64748b" }}>Cumple</div>
-                        <div style={{ fontWeight: 700, color: "#16a34a" }}>{item.summary?.cumple ?? 0}</div>
+                        <div style={{ fontWeight: 700, color: "#16a34a" }}>
+                          {item.summary?.cumple ?? 0}
+                        </div>
                       </div>
                       <div style={{ background: "#fef2f2", borderRadius: 10, padding: 10 }}>
                         <div style={{ fontSize: 12, color: "#64748b" }}>No cumple</div>
-                        <div style={{ fontWeight: 700, color: "#dc2626" }}>{item.summary?.noCumple ?? 0}</div>
+                        <div style={{ fontWeight: 700, color: "#dc2626" }}>
+                          {item.summary?.noCumple ?? 0}
+                        </div>
                       </div>
                       <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 10 }}>
                         <div style={{ fontSize: 12, color: "#64748b" }}>No aplica</div>
@@ -1616,11 +1931,16 @@ export default function App() {
                     </div>
 
                     <div style={{ marginTop: 10, color: "#475569" }}>
-                      Mail destinatario: {item.email || "-"} · Hallazgos guardados: {item.findings?.length ?? 0}
+                      Mail destinatario: {item.email || "-"} · Hallazgos guardados:{" "}
+                      {item.findings?.length ?? 0}
                     </div>
 
                     <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button className="ui-button" style={buttonStyle} onClick={() => setSelectedHistoryItem(item)}>
+                      <button
+                        className="ui-button"
+                        style={buttonStyle}
+                        onClick={() => setSelectedHistoryItem(item)}
+                      >
                         <Eye size={16} /> Ver detalle
                       </button>
                       <button
@@ -1660,21 +1980,29 @@ export default function App() {
                   <div>
                     <h3 style={{ margin: 0 }}>Detalle de inspección</h3>
                     <div style={{ color: "#475569" }}>
-                      {selectedHistoryItem.company || "Sin empresa"} · {selectedHistoryItem.plant || "Sin planta"} ·{" "}
-                      {selectedHistoryItem.verification_type === "documental" ? "Documental" : "En campo"}
+                      {selectedHistoryItem.company || "Sin empresa"} ·{" "}
+                      {selectedHistoryItem.plant || "Sin planta"} ·{" "}
+                      {formatVerificationTypeLabel(selectedHistoryItem.verification_type)}
                     </div>
                   </div>
-                  <button className="ui-button" style={buttonStyle} onClick={() => setSelectedHistoryItem(null)}>
+                  <button
+                    className="ui-button"
+                    style={buttonStyle}
+                    onClick={() => setSelectedHistoryItem(null)}
+                  >
                     Cerrar detalle
                   </button>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  {(selectedHistoryItem.checklist || []).map((row) => {
+                  {(selectedHistoryItem.checklist || []).map((row, index) => {
                     const detailPhotoUrl = row.photoPath ? historyPhotoUrls[row.photoPath] || "" : "";
+                    const displayNumber = getDisplayNumber(row, index + 1);
+                    const displayCode = getDisplayCode(row);
+
                     return (
                       <div
-                        key={row.id}
+                        key={`${displayCode}-${index}`}
                         className="history-detail-row"
                         style={{
                           border: "1px solid #e2e8f0",
@@ -1683,27 +2011,29 @@ export default function App() {
                         }}
                       >
                         <div className="row-meta">
-                          <span className="row-chip">{row.category}</span>
-                          <span className="row-chip row-chip--code">{row.id}</span>
-                          {row.criticality && (
-                            <span className={getCriticalityChipClassName(row.criticality)}>
-                              {formatCriticalityLabel(row.criticality)}
-                            </span>
-                          )}
+                          <span className="row-chip">{row.category || "Sin categoría"}</span>
+                          <span className="row-chip">N° {formatVisibleNumber(displayNumber)}</span>
+                          <span className="row-chip row-chip--code">{displayCode}</span>
+                          <span className={getCriticalityChipClassName(row.criticality)}>
+                            {formatCriticalityFallback(row.criticality)}
+                          </span>
                         </div>
-                        <div style={{ fontWeight: 700 }}>{row.item}</div>
+                        <div style={{ fontWeight: 700 }}>
+                          {displayNumber ? `${displayNumber}. ` : ""}
+                          {row.item || "Sin texto"}
+                        </div>
                         <div className="history-detail-row__grid">
                           <div><strong>Resultado:</strong> {statusUi[row.status].label}</div>
                           <div><strong>Observación:</strong> {row.observation || "-"}</div>
                           <div><strong>Responsable:</strong> {row.responsible || "-"}</div>
-                          <div><strong>Foto:</strong> {row.photoName || "-"}</div>
+                          <div><strong>Foto:</strong> {row.photoName || row.photoPath || "-"}</div>
                         </div>
                         {detailPhotoUrl ? (
                           <div className="history-photo">
                             <img
                               className="history-photo__preview"
                               src={detailPhotoUrl}
-                              alt={`Foto asociada al item ${row.id}`}
+                              alt={`Foto asociada al ítem ${displayCode}`}
                             />
                           </div>
                         ) : row.photoPath ? (
@@ -1723,11 +2053,22 @@ export default function App() {
         <div className="section-card" style={box}>
           <h2 style={{ marginTop: 0 }}>Finalizar inspección</h2>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="ui-button ui-button--primary" style={primaryButtonStyle} onClick={saveOnline} disabled={isSaving}>
-              <Save size={16} /> {isSaving ? "Guardando..." : "Guardar online"}
+            <button
+              className="ui-button ui-button--primary"
+              style={primaryButtonStyle}
+              onClick={() => void executeSave(false)}
+              disabled={isSaving}
+            >
+              <Save size={16} /> {saveMode === "save" ? "Guardando..." : "Guardar online"}
             </button>
-            <button className="ui-button" style={buttonStyle} onClick={saveAndExport} disabled={isSaving}>
-              <Download size={16} /> Guardar y exportar
+            <button
+              className="ui-button"
+              style={buttonStyle}
+              onClick={() => void executeSave(true)}
+              disabled={isSaving}
+            >
+              <Download size={16} />{" "}
+              {saveMode === "save_export" ? "Guardando..." : "Guardar y exportar Excel"}
             </button>
             <button className="ui-button" style={buttonStyle} onClick={openMailDraft}>
               <Send size={16} /> Enviar resultados
@@ -1773,6 +2114,13 @@ export default function App() {
               }}
             >
               {saveError}
+              {validationErrors.length > 0 && (
+                <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+                  {validationErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
